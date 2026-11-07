@@ -27,7 +27,13 @@ Vorinstalliert ist Seite 190 („Nice to meet you!“, 39 Einträge).
 
 - Einsprechen: In den iOS-Einstellungen muss die **Diktierfunktion** an sein (Einstellungen → Allgemein → Tastatur → Diktierfunktion). Beim ersten Mal das Mikrofon erlauben. Die Erkennung läuft über Apple-Server, also mit Internet.
 - „Zum Home-Bildschirm“ (Teilen-Symbol in Safari) legt ein App-Symbol an. **Bitte ausprobieren, ob das Einsprechen auch darüber geht.** Wenn nicht, die Seite im Safari öffnen (Lesezeichen) und Schreiben/Aufdecken nutzen, wenn kein Mikro.
-- Der Lernstand liegt im Browser des Geräts. Unter „Vokabeln → Sicherung“ kann er als Datei gesichert und wieder geladen werden – ab und zu machen.
+- Der Lernstand liegt im Browser des Geräts. Jedes Gerät (iPad, PC, Handy) hat seine eigenen Daten, auch Safari und das Home-Bildschirm-Symbol sind getrennt. Unter „Vokabeln → Sicherung“ kann alles als Datei gesichert und auf einem anderen Gerät wieder geladen werden – ab und zu machen. Auf Wunsch kommt der API-Schlüssel mit in die Sicherung (Datei dann nicht weitergeben).
+
+## Üben
+
+- **Quiz im Querformat:** Frage links, Lösung rechts, die Töpfe stehen groß fest unten. Die Vokabel fliegt von der Karte in den Topf, in dem sie lag, und von dort in den neuen Topf.
+- **Belohnung:** Konfetti, Feuerwerk, Emoji-Regen oder Ballons plus wechselnde Sprüche (Einstellungen → Belohnung, auch abschaltbar).
+- **Gezielt aus einem Topf üben:** Meine Töpfe → Topf antippen → 10, 20 oder alle üben.
 
 ## Neue Seiten hinzufügen (Tochter/Frau können das selbst)
 

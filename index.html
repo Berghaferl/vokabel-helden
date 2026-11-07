@@ -132,7 +132,9 @@ nav.tabs button.on{background:#F1ECFF;color:var(--primary-d)}
 @keyframes steam{0%,100%{opacity:.25;transform:translateY(2px)}50%{opacity:.8;transform:translateY(-3px)}}
 
 /* Quiz */
-.quiz{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;padding:calc(12px + var(--safe-t)) 14px calc(12px + var(--safe-b))}
+.quiz{display:flex;flex-direction:column;height:100vh;height:100dvh;padding:calc(10px + var(--safe-t)) 14px calc(10px + var(--safe-b));overflow:hidden}
+.qmain{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:2px 2px 10px}
+.qleft{display:flex;flex-direction:column}
 .qtop{display:flex;gap:10px;align-items:center}
 .prog{flex:1;height:16px;background:#E8E1FF;border-radius:10px;overflow:hidden}
 .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--sky),var(--primary));border-radius:10px;transition:width .4s}
@@ -181,9 +183,36 @@ nav.tabs button.on{background:#F1ECFF;color:var(--primary-d)}
 .sol .ipa{color:var(--primary-d);font-size:18px;font-weight:700}
 .sol .de{font-weight:700;color:var(--ink)}
 .fb .btn.next{margin-top:12px;width:100%}
-.potwrap{margin-top:auto;padding-top:22px}
-.newpile{text-align:center;font-weight:800;font-size:13px;color:var(--muted);margin-bottom:8px}
+.potwrap{flex:none;padding-top:8px}
 .potwrap .pots{background:rgba(255,255,255,.65);border:2px solid var(--line);border-radius:22px;padding:14px 8px 8px}
+.sideowl{display:none}
+
+/* iPad quer (und Desktop): Frage links, Lösung rechts, Töpfe groß und fest unten */
+@media (min-width:760px) and (min-height:560px) and (min-aspect-ratio:13/10){
+  .quiz{padding:calc(12px + var(--safe-t)) 22px calc(12px + var(--safe-b))}
+  .qmain{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px;align-content:start}
+  .qdir{margin:4px 0 10px}
+  .qcard{padding:14px 18px}
+  .qprompt{font-size:clamp(30px,4.4vw,50px);margin:4px 0 2px}
+  .qipa{font-size:20px}
+  .audio{margin:8px 0 2px}
+  .ans{margin-top:8px}
+  .mic{width:84px;height:84px;font-size:36px;margin:2px auto 12px}
+  .qright{padding-top:6px}
+  .sideowl{display:block;text-align:center;font-size:100px;margin-top:26px;animation:bob 3s ease-in-out infinite}
+  .sideowl small{display:block;font-size:18px;color:var(--muted);font-weight:800;margin-top:6px}
+  .fb{margin-top:0}
+  .potwrap{padding-top:10px}
+  .potwrap .pots{gap:10px;padding:18px 14px 10px}
+  .pot svg{max-width:min(128px,10vw)}
+  .pot .cap{font-size:14px;margin-top:3px}
+  .pot .badge{min-width:28px;height:28px;font-size:15px;margin-right:-50px}
+}
+
+/* Spruch-Banner */
+.cheer{position:fixed;left:50%;top:57%;z-index:220;pointer-events:none;font-weight:900;font-size:clamp(34px,6.8vw,72px);line-height:1.08;text-align:center;max-width:92vw;color:#fff;transform:translate(-50%,-50%);
+  text-shadow:-3px -3px 0 var(--o,#5B3FD6),3px -3px 0 var(--o,#5B3FD6),-3px 3px 0 var(--o,#5B3FD6),3px 3px 0 var(--o,#5B3FD6),0 7px 0 var(--o,#5B3FD6),0 14px 24px rgba(0,0,0,.25)}
+.cheer.big{font-size:clamp(40px,8vw,88px)}
 
 /* Fliegende Chips & Konfetti */
 .chip{
@@ -279,8 +308,8 @@ const MAXPOT = 4;                       // Lern-Töpfe 1..4; die 5. richtige Ant
 const KEY = 'vokabel-helden.v1';
 const DONE = MAXPOT + 1;                // 5 = Pokal-Topf "erledigt"
 const POTCOL = {w:'#FF5D6C', n:'#CFC8F0', 1:'#FF9F43', 2:'#FFD43B', 3:'#9BDB4D', 4:'#2ED3A5', 5:'#FFC83D'};
-const POTKEYS = ['w',1,2,3,4,5];
-const POTCAP = {w:'Falsch', 1:'1', 2:'2', 3:'3', 4:'4', 5:'Fertig'};
+const POTKEYS = ['n','w',1,2,3,4,5];
+const POTCAP = {n:'Neu', w:'Falsch', 1:'1', 2:'2', 3:'3', 4:'4', 5:'Fertig'};
 const DIRS = {'de-en':{from:'de',to:'en'}, 'en-de':{from:'en',to:'de'}};
 const FLAG = {de:'🇩🇪', en:'🇬🇧'};
 const LANGNAME = {de:'Deutsch', en:'Englisch'};
@@ -386,7 +415,7 @@ function parseVocabText(text, defPage, defTitle){
 }
 
 /* ---------- Daten ---------- */
-const DEF = {scanModel:'claude-sonnet-5-5', theme:'mix', sound:true, speakQ:true, speakA:true, rate:0.9, enVoice:'', deVoice:'', size:10, dir:'mix', mode:'speak', selected:[], name:''};
+const DEF = {scanModel:'claude-sonnet-5-5', reward:'mix', cheer:true, theme:'mix', sound:true, speakQ:true, speakA:true, rate:0.9, enVoice:'', deVoice:'', size:10, dir:'mix', mode:'speak', selected:[], name:''};
 let DB = loadDB();
 
 function seedDB(){
@@ -634,8 +663,15 @@ function beep(seq){
     });
   }catch(e){}
 }
-const SND={ ok:()=>beep([[660,0,.12],[880,.1,.2]]), bad:()=>beep([[260,0,.18,'triangle'],[200,.14,.25,'triangle']]),
-            done:()=>beep([[523,0,.12],[659,.1,.12],[784,.2,.12],[1046,.3,.35]]) };
+const SND={
+  ok:(n=0)=>{
+    const sets=[[[660,0,.12],[880,.1,.2]],[[523,0,.1],[659,.09,.1],[784,.18,.2]],[[784,0,.1],[988,.08,.1],[1318,.16,.22]],[[440,0,.08],[880,.07,.08],[660,.14,.2]]];
+    const k=1+Math.min(n,8)*0.03; beep(pick(sets).map(([f,t,d])=>[f*k,t,d]));
+  },
+  bad:()=>beep([[260,0,.18,'triangle'],[200,.14,.25,'triangle']]),
+  combo:()=>beep([[523,0,.1],[659,.08,.1],[784,.16,.1],[1046,.24,.1],[1318,.32,.3]]),
+  done:()=>beep([[523,0,.12],[659,.1,.12],[784,.2,.12],[1046,.3,.35]])
+};
 
 /* ---------- Spracherkennung ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -654,6 +690,13 @@ function potSVG(theme, k, fill){
   const id='c'+(++_uid), c=POTCOL[k], d=shade(c,-.3), l=shade(c,.4), s=sym(k);
   const sh='<ellipse cx="50" cy="118" rx="38" ry="5" fill="#2B2350" opacity=".12"/>';
   const label=(x,y,w,h)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="#fff"/><text x="${x+w/2}" y="${y+h-7}" text-anchor="middle" font-size="22" font-weight="800" fill="${d}" font-family="ui-rounded,system-ui,sans-serif">${s}</text>`;
+  if(k==='n'){
+    return `<svg viewBox="0 0 100 124" aria-hidden="true">${sh}
+      <rect x="20" y="58" width="60" height="44" rx="10" fill="${shade(c,-.15)}" transform="rotate(-8 50 80)"/>
+      <rect x="20" y="50" width="60" height="44" rx="10" fill="${c}" stroke="${d}" stroke-width="2.5" transform="rotate(6 50 72)"/>
+      <rect x="16" y="40" width="68" height="52" rx="11" fill="#fff" stroke="${d}" stroke-width="3"/>
+      <text x="50" y="76" text-anchor="middle" font-size="30" font-weight="800" fill="${d}" font-family="ui-rounded,system-ui,sans-serif">?</text></svg>`;
+  }
   if(k===DONE){
     return `<svg viewBox="0 0 100 124" aria-hidden="true">${sh}
       <path d="M28 14h44v30a22 22 0 0 1-44 0z" fill="${c}"/>
@@ -721,26 +764,173 @@ function burst(x,y,n=12,emojis=['⭐','✨','🎉','💫']){
     a.onfinish=()=>s.remove();
   }
 }
-function flyChip(fromRect, toEl, text, ok, cb){
-  if(!toEl){ cb&&cb(0,0); return; }
-  const chip=document.createElement('div'); chip.className='chip '+(ok?'ok':'bad'); chip.textContent=text;
+/* ---------- Belohnungs-Effekte über den ganzen Bildschirm ---------- */
+const FX={cv:null,ctx:null,parts:[],raf:0,last:0,w:0,h:0,dpr:1};
+const FXCOL=['#FF5D6C','#FFC83D','#2ED3A5','#38B6FF','#7B5CFA','#FF9F43','#FF7AC8','#9BDB4D'];
+function fxResize(){ if(!FX.cv) return; FX.dpr=Math.min(2,window.devicePixelRatio||1); FX.w=innerWidth; FX.h=innerHeight; FX.cv.width=Math.round(FX.w*FX.dpr); FX.cv.height=Math.round(FX.h*FX.dpr); }
+function fxInit(){
+  if(FX.cv) return;
+  const c=document.createElement('canvas'); c.setAttribute('aria-hidden','true'); c.id='fxcanvas';
+  c.style.cssText='position:fixed;left:0;top:0;width:100%;height:100%;z-index:150;pointer-events:none';
+  document.body.appendChild(c); FX.cv=c; FX.ctx=c.getContext('2d'); fxResize();
+  addEventListener('resize',fxResize);
+}
+function fxAdd(p){
+  p.max=p.life; FX.parts.push(p);
+  if(FX.parts.length>700) FX.parts.splice(0,FX.parts.length-700);
+  if(!FX.raf){ FX.last=0; FX.raf=requestAnimationFrame(fxTick); }
+}
+function fxTick(ts){
+  const dt=Math.min(0.05, FX.last ? (ts-FX.last)/1000 : 0.016); FX.last=ts;
+  const {ctx,w,h,dpr}=FX;
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  FX.parts=FX.parts.filter(p=>{
+    if(p.delay>0){ p.delay-=dt; return true; }
+    p.life-=dt; if(p.life<=0) return false;
+    p.t=(p.t||0)+dt;
+    p.vy+=(p.g||0)*dt; p.vx*=Math.pow(p.dragX??1,dt); p.vy*=Math.pow(p.dragY??1,dt);
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    ctx.globalAlpha=Math.min(1,p.life/0.5);
+    if(p.type==='rect'){
+      p.rot+=p.vr*dt; p.flip+=p.vf*dt;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.scale(1,Math.cos(p.flip)); ctx.fillStyle=p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); ctx.restore();
+    }else if(p.type==='dot'){
+      ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*(0.4+0.6*Math.min(1,p.life/p.max*1.5)),0,6.2832); ctx.fill();
+    }else{
+      ctx.font=p.size+'px -apple-system,"Apple Color Emoji","Segoe UI Emoji",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(p.ch,p.x+Math.sin(p.t*p.sw)*p.swa,p.y);
+    }
+    return true;
+  });
+  ctx.globalAlpha=1;
+  if(FX.parts.length) FX.raf=requestAnimationFrame(fxTick); else { FX.raf=0; ctx.clearRect(0,0,w,h); }
+}
+function confettiBurst(x,y,n,tilt,pow){
+  for(let i=0;i<n;i++){
+    const a=-Math.PI/2+tilt+(Math.random()-.5)*1.1, v=pow*(0.45+Math.random()*0.65);
+    fxAdd({type:'rect',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,g:520,dragX:.3,dragY:.1,rot:Math.random()*6.28,vr:(Math.random()-.5)*14,flip:Math.random()*6,vf:6+Math.random()*8,
+      w:7+Math.random()*7,h:4+Math.random()*6,color:pick(FXCOL),life:2.4+Math.random()*1.4,delay:Math.random()*.15});
+  }
+}
+const FXS={
+  confetti(p){
+    const W=FX.w,H=FX.h;
+    confettiBurst(W*.1,H*.92,Math.round(26*p),.45,1250); confettiBurst(W*.9,H*.92,Math.round(26*p),-.45,1250);
+    for(let i=0;i<Math.round(14*p);i++) fxAdd({type:'rect',x:Math.random()*W,y:-20-Math.random()*H*.3,vx:(Math.random()-.5)*60,vy:60+Math.random()*80,g:120,dragX:.5,dragY:.2,
+      rot:Math.random()*6.28,vr:(Math.random()-.5)*10,flip:Math.random()*6,vf:5+Math.random()*7,w:7+Math.random()*7,h:4+Math.random()*6,color:pick(FXCOL),life:3.4+Math.random(),delay:Math.random()*.6});
+  },
+  fireworks(p){
+    const bursts=Math.max(2,Math.round(1+p*1.2));
+    for(let b=0;b<bursts;b++) setTimeout(()=>{
+      if(!FX.cv) return;
+      const x=FX.w*(.2+Math.random()*.6), y=FX.h*(.14+Math.random()*.34), c1=pick(FXCOL), c2=pick(FXCOL), n=48;
+      for(let i=0;i<n;i++){
+        const a=i/n*6.2832+Math.random()*.2, v=170+Math.random()*230;
+        fxAdd({type:'dot',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,g:260,dragX:.12,dragY:.12,r:3.6,color:i%2?c1:c2,life:1.1+Math.random()*.6});
+      }
+      for(let i=0;i<12;i++) fxAdd({type:'dot',x,y,vx:(Math.random()-.5)*120,vy:(Math.random()-.5)*120,g:80,dragX:.2,dragY:.2,r:2.6,color:'#FFFFFF',life:.9+Math.random()*.5});
+    },b*380);
+  },
+  rain(p){
+    const set=pick([['⭐','🌟','✨'],['💖','💜','💙','💚'],['🦄','🌈','🍭','🎈'],['🍕','🍩','🍓','🍦'],['🐶','🐱','🐼','🦊']]);
+    for(let i=0;i<Math.round(22*p);i++) fxAdd({type:'emoji',ch:pick(set),size:26+Math.random()*26,x:Math.random()*FX.w,y:-40-Math.random()*FX.h*.6,vx:0,vy:150+Math.random()*170,g:60,
+      sw:2+Math.random()*3,swa:16+Math.random()*28,life:4.2,delay:Math.random()*.8});
+  },
+  balloons(p){
+    for(let i=0;i<Math.round(9*p);i++) fxAdd({type:'emoji',ch:'🎈',size:42+Math.random()*30,x:Math.random()*FX.w,y:FX.h+60+Math.random()*FX.h*.3,vx:0,vy:-(120+Math.random()*130),g:0,
+      sw:1.5+Math.random()*2,swa:18+Math.random()*26,life:6.5,delay:Math.random()*.7});
+  }
+};
+function reward(power=1){
+  const st=DB.settings.reward||'mix';
+  if(st==='off') return;
+  try{ if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; }catch(e){}
+  fxInit();
+  FXS[st==='mix' ? pick(['confetti','fireworks','rain','balloons']) : st](power);
+}
+
+/* ---------- Sprüche ---------- */
+const PRAISE=['Stark!','Boom! Sitzt!','Volltreffer!','Mega!','Du rockst das!','Genau so!','Wie ein Profi!','Sauber gemacht!','Ein Kracher!','Einfach spitze!','Läuft bei dir!','Yeah, geschafft!','Kluger Kopf!','Treffer, versenkt!','Gar nicht schlecht, Herr Specht!','Da kannst du stolz sein!','Hammer!','Vokabel-Ninja!','Ein Hoch auf dich!','Perfekt gelandet!','Wie geschmiert!','Da staunt die Eule!','Ohne Fehl und Tadel!','Das war flott!','Zack, drin!','Fantastisch!','Genial!','Oberklasse!','So muss das!','Da lacht das Wörterbuch!'];
+const PRAISE_NAME=['{n}, du bist der Wahnsinn!','Weiter so, {n}!','{n} rockt die Vokabeln!','Das hat {n} richtig drauf!','Respekt, {n}!'];
+const COMBO={3:['Dreierpack! 🔥','Hattrick! 🎩'],5:['Fünf in Folge – on fire! 🔥','High Five! ✋ Fünf richtig!'],7:['Sieben in Folge! 🚀','Unaufhaltsam! 🚀'],10:['ZEHN in Folge! 🏆','Vokabel-Held! Zehn am Stück! 🏆']};
+const EMO=['🎉','🌟','🚀','🏅','💥','🦄','🔥','🥳','💪','✨','🎊'];
+const OOPS=['Nicht schlimm, das sitzt gleich!','Fast! Beim nächsten Mal klappt’s.','Auch Eulen vertun sich mal.','Oha, das merken wir uns!','Kein Beinbruch!','Hoppla! Gleich nochmal.','Aus Fehlern wird man klug.','Das kriegen wir hin!','Knapp vorbei – gleich sitzt’s!'];
+let lastPraise='';
+function praiseText(){
+  const nm=(DB.settings.name||'').trim();
+  const pool = nm && Math.random()<.3 ? PRAISE_NAME.map(t=>t.replace('{n}',nm)) : PRAISE;
+  let t, k=0; do{ t=pick(pool); }while(t===lastPraise && k++<6);
+  lastPraise=t; return t;
+}
+function cheer(text, big){
+  if(!DB.settings.cheer) return;
+  const el=document.createElement('div'); el.className='cheer'+(big?' big':''); el.textContent=text;
+  el.style.setProperty('--o',pick(['#5B3FD6','#D63D4C','#169968','#E0A400','#1D8FD1','#D6409F']));
+  document.body.appendChild(el);
+  const a=el.animate([
+    {transform:'translate(-50%,-50%) scale(.2) rotate(-10deg)',opacity:0,offset:0},
+    {transform:'translate(-50%,-50%) scale(1.18) rotate(4deg)',opacity:1,offset:.28},
+    {transform:'translate(-50%,-50%) scale(1) rotate(-2deg)',opacity:1,offset:.45},
+    {transform:'translate(-50%,-54%) scale(1) rotate(0deg)',opacity:1,offset:.8},
+    {transform:'translate(-50%,-70%) scale(.9)',opacity:0,offset:1}
+  ],{duration:big?2300:1700,easing:'ease-out'});
+  a.onfinish=()=>el.remove(); setTimeout(()=>el.remove(),3200);
+}
+
+/* ---------- Flug der Vokabel: Karte -> Topf, in dem sie liegt -> Ziel-Topf ---------- */
+function pathAnimate(chip,p0,p1,dur,lift,o={}){
+  const N=20, ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2, fr=[];
+  const s0=o.s0??1, s1=o.s1??1, r0=o.r0??0, r1=o.r1??0;
+  for(let i=0;i<=N;i++){
+    const t=i/N, e=ease(t);
+    const x=p0.x+(p1.x-p0.x)*e, y=p0.y+(p1.y-p0.y)*e-lift*4*e*(1-e);
+    const sc=s0+(s1-s0)*e+(o.pulse||0)*Math.sin(Math.PI*e);
+    const rot=r0+(r1-r0)*e+(o.wobble||0)*Math.sin(e*Math.PI*5)*(1-e);
+    fr.push({transform:`translate(${x}px,${y}px) scale(${sc}) rotate(${rot}deg)`,offset:t});
+  }
+  return chip.animate(fr,{duration:dur,easing:'linear',fill:'forwards'});
+}
+function flyJourney(o){
+  const chip=document.createElement('div'); chip.className='chip '+(o.ok?'ok':'bad'); chip.textContent=o.text;
+  chip.style.left='0'; chip.style.top='0'; chip.dataset.fly='1';
   document.body.appendChild(chip);
   const w=chip.offsetWidth, h=chip.offsetHeight;
-  const sx=fromRect.left+fromRect.width/2, sy=fromRect.top+fromRect.height/2;
-  const tr=toEl.getBoundingClientRect(); const tx=tr.left+tr.width/2, ty=tr.top+tr.height*0.3;
-  chip.style.left=(sx-w/2)+'px'; chip.style.top=(sy-h/2)+'px';
-  const dx=tx-sx, dy=ty-sy;
-  const a=chip.animate([
-    {transform:'translate(0,0) scale(1) rotate(0deg)',opacity:1,offset:0},
-    {transform:`translate(${dx*.3}px,${Math.min(dy*.15,0)-120}px) scale(.95) rotate(${ok?-7:7}deg)`,opacity:1,offset:.38},
-    {transform:`translate(${dx}px,${dy}px) scale(.22) rotate(${ok?16:-16}deg)`,opacity:.85,offset:1}
-  ],{duration:1000,easing:'cubic-bezier(.45,.05,.3,1)',fill:'forwards'});
-  const done=()=>{ chip.remove(); cb&&cb(tx,ty); };
-  a.onfinish=done; setTimeout(()=>{ if(chip.isConnected) done(); }, 1500);
+  const ctr=r=>({x:r.left+r.width/2-w/2, y:r.top+r.height/2-h/2});
+  const top=el=>{ const r=el.getBoundingClientRect(); return {x:r.left+r.width/2-w/2, y:r.top+r.height*.24-h/2}; };
+  const A=ctr(o.fromRect);
+  const P1=o.srcEl?top(o.srcEl):A, P2=o.dstEl?top(o.dstEl):P1;
+  const same=Math.abs(P1.x-P2.x)<2&&Math.abs(P1.y-P2.y)<2, dist=Math.hypot(P2.x-P1.x,P2.y-P1.y);
+  let finished=false;
+  const finish=()=>{ if(finished) return; finished=true; chip.remove(); o.onLand&&o.onLand(P2.x+w/2,P2.y+h/2); };
+  setTimeout(finish,3300);   // Sicherheitsnetz
+  // 1) Die Karte fällt in den Topf, in dem die Vokabel bisher lag (neue: in den Neu-Stapel)
+  const leg1=pathAnimate(chip,A,P1,560,0,{s0:1,s1:.55,r0:0,r1:o.ok?-8:8});
+  leg1.onfinish=()=>{
+    if(finished) return;
+    o.onDrop&&o.onDrop();
+    // 2) ...und springt von dort im Bogen in den Ziel-Topf
+    setTimeout(()=>{
+      if(finished) return;
+      const lift=same?90:Math.max(120,Math.min(260,dist*.45));
+      const leg2=pathAnimate(chip,P1,P2,same?650:900,lift,{s0:.5,s1:.4,pulse:.55,r0:-10,r1:o.ok?(P2.x>=P1.x?360:-360):0,wobble:o.ok?0:18});
+      leg2.onfinish=finish;
+    },140);
+  };
 }
 function popEl(el){
   if(!el||!el.animate) return;
   el.animate([{transform:'scale(1)'},{transform:'scale(1.2) rotate(-4deg)'},{transform:'scale(.95) rotate(2deg)'},{transform:'scale(1)'}],{duration:480,easing:'ease-out'});
+}
+function isStandalone(){ try{ return window.navigator.standalone===true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches); }catch(e){ return false; } }
+async function fillStoreInfo(){
+  let t='Du nutzt die App gerade '+(isStandalone()?'als Home-Bildschirm-App.':'im Browser (nicht als Home-Bildschirm-Symbol).');
+  try{
+    if(navigator.storage && navigator.storage.persisted){
+      const p=await navigator.storage.persisted();
+      t+=' Dauerhafter Speicher: '+(p?'ja ✔':'vom Browser nicht zugesichert – bitte ab und zu eine Sicherung machen.');
+    }
+  }catch(e){}
+  const el=$('#storeInfo'); if(el) el.textContent=t;
 }
 let toastT=null;
 function toast(msg){
@@ -759,9 +949,9 @@ function showSheet(html, center){
   return o;
 }
 function closeSheet(){ const o=$('#overlay'); if(o) o.remove(); }
-function askConfirm(msg, okLabel='Ja', danger=false){
+function askConfirm(msg, okLabel='Ja', danger=false, cancelLabel='Abbrechen'){
   return new Promise(res=>{
-    const o=showSheet(`<h3>${esc(msg)}</h3><div class="btns"><button class="btn ghost" data-r="0">Abbrechen</button><button class="btn ${danger?'bad':''}" data-r="1">${esc(okLabel)}</button></div>`, true);
+    const o=showSheet(`<h3>${esc(msg)}</h3><div class="btns"><button class="btn ghost" data-r="0">${esc(cancelLabel)}</button><button class="btn ${danger?'bad':''}" data-r="1">${esc(okLabel)}</button></div>`, true);
     o.addEventListener('click',e=>{ const b=e.target.closest('[data-r]'); if(b){ closeSheet(); res(b.dataset.r==='1'); } else if(e.target===o) res(false); });
   });
 }
@@ -803,6 +993,7 @@ function render(){
     ${[['learn','📖','Üben'],['pots','🏺','Meine Töpfe'],['words','📚','Vokabeln'],['settings','⚙️','Einstellungen']]
       .map(([k,i,t])=>`<button data-act="tab" data-tab="${k}" class="${UI.tab===k?'on':''}"><span>${i}</span>${t}</button>`).join('')}
   </div></nav>`;
+  if(UI.tab==='settings') fillStoreInfo();
 }
 
 /* ----- Üben (Start) ----- */
@@ -829,7 +1020,7 @@ function viewLearn(){
   }).join('');
   return `
   <div class="hero"><div class="owl">🦉</div><div class="bubble">${hello}</div></div>
-  <div class="chips"><span class="chip-s">🔥 ${sk} ${sk===1?'Tag':'Tage'} in Folge</span><span class="chip-s">✅ Heute: ${DB.stats.today.d===todayStr()?DB.stats.today.n:0} Karten</span></div>
+  <div class="chips"><span class="chip-s">🔥 ${sk} ${sk===1?'Tag':'Tage'} in Folge</span><span class="chip-s">✅ Heute: ${DB.stats.today.d===todayStr()?DB.stats.today.n:0} beantwortet</span></div>
   <div class="rowtools"><h2>Welche Seiten?</h2>
     <div><button class="link" data-act="selAll">Alle</button><button class="link" data-act="selNone">Keine</button></div></div>
   ${pages || `<div class="panel">Noch keine Vokabeln. Unter „Vokabeln“ kannst du Seiten hinzufügen.</div>`}
@@ -839,15 +1030,16 @@ function viewLearn(){
   <div class="panel"><h3>Wie antworten?</h3><div class="seg">
     ${[['speak','🎤 Sprechen','einsprechen'],['write','⌨️ Schreiben','tippen'],['reveal','🃏 Aufdecken','selbst prüfen']].map(([v,t,s])=>`<button data-act="setOpt" data-k="mode" data-v="${v}" class="${st.mode===v?'on':''}">${t}<small>${s}</small></button>`).join('')}
   </div></div>
-  <div class="panel"><h3>Wie viele Karten?</h3><div class="seg">
+  <div class="panel"><h3>Wie viele ${unitName()}?</h3><div class="seg">
     ${[['10','10'],['20','20'],['all','Alle']].map(([v,t])=>`<button data-act="setOpt" data-k="size" data-v="${v}" class="${String(st.size)===v?'on':''}">${t}</button>`).join('')}
-  </div></div>`;
+  </div>${st.dir==='mix'?'<p class="small muted" style="margin:10px 0 0">Gemischt: Jede Vokabel wird einmal auf Deutsch und einmal auf Englisch gefragt (jeweils mit eigenen Töpfen). Das zählt als zwei Fragen.</p>':''}</div>`;
 }
+function unitName(){ return DB.settings.dir==='mix' ? 'Fragen' : 'Vokabeln'; }
 function startBar(){
   const {pool,n}=startCount();
   const none=selectedPages().length===0;
   const allDone = !none && pool===0;
-  const label = none ? 'Wähle mindestens eine Seite' : allDone ? '🏆 Alles geschafft – nochmal wiederholen' : `🚀 Los geht's! (${n} Karten)`;
+  const label = none ? 'Wähle mindestens eine Seite' : allDone ? '🏆 Alles geschafft – nochmal wiederholen' : `🚀 Los geht's! (${n} ${unitName()})`;
   return `<div class="startbar"><button class="btn big" data-act="start" ${none?'disabled':''}>${label}</button></div>`;
 }
 
@@ -860,17 +1052,28 @@ function viewPots(){
     const pct=tot?Math.round(c[DONE]/tot*100):0;
     return `<div class="panel"><h3>${FLAG[DIRS[d].from]} → ${FLAG[DIRS[d].to]} &nbsp;${LANGNAME[DIRS[d].from]} → ${LANGNAME[DIRS[d].to]}</h3>
       <div class="pots" style="padding-top:6px">${potsHTML(c,overviewTheme(),{tap:true,d})}</div>
-      <div class="muted small" style="margin-top:10px">📦 Noch nie gefragt: ${c.n} · 🏆 Erledigt: ${c[DONE]} von ${tot} (${pct} %)</div></div>`;
+      <div class="muted small" style="margin-top:10px">🏆 Erledigt: ${c[DONE]} von ${tot} (${pct} %)</div></div>`;
   }).join('');
-  return `<div class="hero"><div class="owl">🏺</div><div class="bubble">So weit bist du schon! Tippe auf einen Topf, um die Vokabeln darin zu sehen.</div></div>${html}`;
+  return `<div class="hero"><div class="owl">🏺</div><div class="bubble">So weit bist du schon! Tippe auf einen Topf – dort kannst du die Vokabeln darin gezielt üben.</div></div>${html}`;
 }
 function potSheet(d, k){
-  const key = k==='w' ? -1 : +k;
-  const list=buildItems(DB.pages.map(p=>p.id),[d],true).filter(i=>i.lvl===key || (k==='n'&&i.lvl===0));
-  const from=DIRS[d].from;
-  showSheet(`<h3>${k==='w'?'Falsch-Topf':+k===DONE?'Erledigt 🏆':'Topf '+k} (${list.length})</h3>
-    ${list.length? list.map(i=>`<div class="wrow"><div class="t"><span class="en">${esc(from==='en'?i.w.en:i.w.de)}</span><div class="de">${esc(from==='en'?i.w.de:i.w.en)}</div></div></div>`).join('') : '<p class="muted">Hier liegt noch nichts.</p>'}
-    <div class="btns"><button class="btn" data-act="closeSheet">Schließen</button></div>`);
+  const key = k==='w' ? -1 : k==='n' ? 0 : +k;
+  const list=buildItems(DB.pages.map(p=>p.id),[d],true).filter(i=>i.lvl===key);
+  const from=DIRS[d].from, N=list.length;
+  const title = k==='n' ? '📦 Neu-Stapel' : k==='w' ? 'Falsch-Topf' : +k===DONE ? 'Erledigt 🏆' : 'Topf '+k;
+  const up = +k+1===DONE ? 'Fertig' : 'Topf '+(+k+1), down = +k<=1 ? 'Falsch-Topf' : 'Topf '+(+k-1);
+  const hint = k==='n' ? 'Noch nie gefragt. Richtig → Topf 1, falsch → Falsch-Topf.'
+    : k==='w' ? 'Richtig beantwortete Vokabeln wandern in Topf 1.'
+    : +k===DONE ? 'Zur Wiederholung. Falsch heißt: zurück in Topf '+MAXPOT+'.'
+    : `Richtig → ${up}, falsch → ${down}.`;
+  const sizes=[10,20].filter(x=>x<N);
+  const modes=[['speak','🎤 Sprechen'],['write','⌨️ Schreiben'],['reveal','🃏 Aufdecken']];
+  showSheet(`<h3>${title} (${N})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>
+    ${N?`<div class="small" style="font-weight:800;margin:10px 0 6px">Jetzt üben – wie viele?</div>
+      <div class="btns" style="margin-top:0">${sizes.map(x=>`<button class="btn" data-act="startPot" data-d="${d}" data-k="${k}" data-n="${x}">${x}</button>`).join('')}<button class="btn good" data-act="startPot" data-d="${d}" data-k="${k}" data-n="all">Alle ${N}</button></div>
+      <div class="seg" style="margin-top:10px">${modes.map(([v,t])=>`<button data-act="sheetMode" data-v="${v}" data-d="${d}" data-k="${k}" class="${DB.settings.mode===v?'on':''}">${t}</button>`).join('')}</div>`:''}
+    <div style="margin-top:14px">${N ? list.map(i=>`<div class="wrow"><div class="t"><span class="en">${esc(from==='en'?i.w.en:i.w.de)}</span><div class="de">${esc(from==='en'?i.w.de:i.w.en)}</div></div></div>`).join('') : '<p class="muted">Hier liegt noch nichts.</p>'}</div>
+    <div class="btns"><button class="btn ghost" data-act="closeSheet">Schließen</button></div>`);
 }
 
 /* ----- Vokabeln verwalten ----- */
@@ -882,7 +1085,7 @@ function viewWords(){
   <div class="rowtools"><h2>Meine Seiten</h2></div>
   ${rows||'<div class="panel">Noch keine Seiten.</div>'}
   <div class="panel"><h3>💾 Sicherung</h3>
-    <p class="small muted" style="margin:0 0 10px">Der Lernstand liegt nur auf diesem Gerät. Mach ab und zu eine Sicherung – oder wenn du das Gerät wechselst.</p>
+    <p class="small muted" style="margin:0 0 10px">Der Lernstand liegt nur auf diesem Gerät. Mach ab und zu eine Sicherung. Damit lässt sich auch alles auf ein anderes Gerät übertragen.</p>
     <div class="seg"><button data-act="exportBackup">📤 Sicherung speichern</button><button data-act="importBackup">📥 Sicherung laden</button></div>
     <input type="file" id="backupFile" accept=".json,application/json" style="display:none"></div>`;
 }
@@ -897,6 +1100,11 @@ function viewSettings(){
   <div class="panel"><h3>Aussehen der Töpfe</h3><div class="seg">
     ${[['mix','🎲 Bunt gemischt'],['jar','🫙 Gläser'],['pot','🍲 Töpfe'],['bin','🗑️ Mülltonnen']].map(([v,t])=>`<button data-act="setOpt" data-k="theme" data-v="${v}" class="${st.theme===v?'on':''}">${t}</button>`).join('')}
   </div></div>
+  <div class="panel"><h3>🎉 Belohnung bei richtig</h3><div class="seg">
+    ${[['mix','🎲 Bunt gemischt'],['confetti','🎊 Konfetti'],['fireworks','🎆 Feuerwerk'],['rain','🌈 Emoji-Regen'],['balloons','🎈 Ballons'],['off','🔕 Aus']].map(([v,t])=>`<button data-act="setOpt" data-k="reward" data-v="${v}" class="${(st.reward||'mix')===v?'on':''}">${t}</button>`).join('')}
+    </div>
+    ${sw('cheer','Lustige Sprüche','Große Sprüche wie „Boom! Sitzt!“ bei richtigen Antworten')}
+    <button class="btn sm ghost" data-act="testReward" style="margin-top:10px">▶ Ausprobieren</button></div>
   <div class="panel"><h3>Ton & Sprache</h3>
     ${sw('sound','Geräusche','Kleine Töne bei richtig und falsch')}
     ${sw('speakQ','Frage automatisch vorlesen','Die Karte wird beim Erscheinen gesprochen')}
@@ -912,6 +1120,9 @@ function viewSettings(){
   <div class="panel"><h3>🎤 Einsprechen – Hinweise</h3>
     <p class="small" style="margin:0">${SR?'Spracherkennung ist in diesem Browser vorhanden.':'<b style="color:var(--bad-d)">Spracherkennung ist in diesem Browser nicht verfügbar.</b> Nutze „Schreiben“ oder „Aufdecken“.'}</p>
     <p class="small muted" style="margin:8px 0 0">Auf iPad/iPhone: Die App im <b>Safari</b> öffnen und das Mikrofon erlauben. In den iOS-Einstellungen muss <b>Diktierfunktion</b> aktiviert sein (Einstellungen → Allgemein → Tastatur). Die Erkennung läuft über Apple-Server und braucht Internet.</p></div>
+  <div class="panel"><h3>💾 Wo liegen meine Daten?</h3>
+    <p class="small" style="margin:0 0 8px">Alle Vokabeln und der Lernstand liegen <b>nur auf diesem Gerät</b>, im Browser. Jedes Gerät (iPad, PC, Handy) hat seine eigenen Daten, und auch Safari und das Home-Bildschirm-Symbol sind getrennt. Ein anderes Gerät fängt bei null an – auch der API-Schlüssel muss dort neu eingetragen werden. Zum Umziehen: Vokabeln → Sicherung speichern, auf dem anderen Gerät laden.</p>
+    <p class="small muted" id="storeInfo" style="margin:0"></p></div>
   <div class="panel"><h3>Fortschritt</h3>
     <button class="btn bad" data-act="resetProgress">🔄 Lernstand zurücksetzen</button>
     <p class="small muted" style="margin:10px 0 0">Alle Vokabeln landen wieder im Neu-Stapel. Die Vokabeln selbst bleiben.</p></div>`;
@@ -927,13 +1138,28 @@ function startSession(){
   const n=DB.settings.size==='all' ? items.length : Math.min(+DB.settings.size, items.length);
   const queue=spreadSameWord(shuffle(weightedPick(items,n))).map(i=>({w:i.w,d:i.d,pageId:i.pageId,retried:false}));
   const theme = DB.settings.theme==='mix' ? pick(THEMES) : DB.settings.theme;
-  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode, theme, replay, sel, dirs, startedAt:Date.now(), ph:'ask', tries:0};
+  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode, theme, replay, sel, dirs, startedAt:Date.now(), ph:'ask', tries:0, combo:0, restart:null};
   DB.stats.sessions++; save();
   UI.screen='quiz'; render(); window.scrollTo(0,0);
 }
 function sessionCounts(){
   const items=buildItems(S.sel,S.dirs,true);
   return countLevels(items);
+}
+// Gezielt aus einem Topf üben (Töpfe-Tab)
+function startFromPot(d, k, nSel){
+  const key = k==='w' ? -1 : k==='n' ? 0 : +k;
+  const ids=DB.pages.map(p=>p.id);
+  let items=shuffle(buildItems(ids,[d],true).filter(i=>i.lvl===key));
+  if(!items.length) return;
+  const n = nSel==='all' ? items.length : Math.min(+nSel, items.length);
+  unlockAudio();
+  const queue=items.slice(0,n).map(i=>({w:i.w,d:i.d,pageId:i.pageId,retried:false}));
+  const theme = DB.settings.theme==='mix' ? pick(THEMES) : DB.settings.theme;
+  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode, theme, replay:false, sel:ids, dirs:[d], startedAt:Date.now(), ph:'ask', tries:0, combo:0,
+     restart:()=>startFromPot(d,k,nSel)};
+  DB.stats.sessions++; save(); closeSheet();
+  UI.screen='quiz'; render(); window.scrollTo(0,0);
 }
 function curItem(){ return S.queue[S.i]; }
 
@@ -945,6 +1171,8 @@ function audioRow(w, langs){
   if(langs.includes('de')) out.push(b('de','🇩🇪 Deutsch'));
   return `<div class="audio">${out.join('')}</div>`;
 }
+function unitOf(){ return S.dirs.length===1 ? 'Vokabel' : 'Frage'; }
+function scoreHTML(){ return `⭐ ${S.right}${(S.combo||0)>=2?` · 🔥 ${S.combo}`:''}`; }
 function renderQuiz(){
   const it=curItem(); if(!it){ return finishSession(); }
   const dir=DIRS[it.d], w=it.w;
@@ -954,22 +1182,24 @@ function renderQuiz(){
   const pct=Math.round(S.i/S.queue.length*100);
   const promptText = dir.from==='en' ? w.en : w.de;
   const showIpa = dir.from==='en' && w.ipa;
+  const owlHint = S.mode==='speak' ? 'Sag es laut!' : S.mode==='write' ? 'Schreib es auf!' : 'Denk kurz nach …';
   app.innerHTML=`<div class="quiz">
     <div class="qtop"><button class="icon" data-act="quit" aria-label="Beenden">✕</button>
-      <div class="prog"><i style="width:${pct}%"></i></div><div class="score">⭐ ${S.right}</div></div>
-    <div class="qdir">${FLAG[dir.from]} ${LANGNAME[dir.from]} → ${FLAG[dir.to]} ${LANGNAME[dir.to]}</div>
-    <section class="qcard" id="qcard">
-      <div class="qhint">Karte ${S.i+1} von ${S.queue.length}${it.retried?' · nochmal!':''}</div>
-      <div class="qprompt" id="qprompt">${esc(promptText)}</div>
-      <div class="qipa">${showIpa?esc('['+w.ipa+']'):''}</div>
-      ${audioRow(w,[dir.from])}
-      <div class="ans" id="ans"></div>
-    </section>
-    <div id="qfb"></div>
-    <div class="potwrap">
-      <div class="newpile">📦 Neu: <span id="newn">${counts.n}</span></div>
-      <div class="pots" id="pots">${potsHTML(counts,S.theme,{src:lvlKey(lvl)==='n'?null:lvlKey(lvl)})}</div>
-    </div></div>`;
+      <div class="prog"><i style="width:${pct}%"></i></div><div class="score" id="score">${scoreHTML()}</div></div>
+    <div class="qmain">
+      <div class="qleft">
+        <div class="qdir">${FLAG[dir.from]} ${LANGNAME[dir.from]} → ${FLAG[dir.to]} ${LANGNAME[dir.to]}</div>
+        <section class="qcard" id="qcard">
+          <div class="qhint">${unitOf()} ${S.i+1} von ${S.queue.length}${it.retried?' · nochmal!':''}</div>
+          <div class="qprompt" id="qprompt">${esc(promptText)}</div>
+          <div class="qipa">${showIpa?esc('['+w.ipa+']'):''}</div>
+          ${audioRow(w,[dir.from])}
+          <div class="ans" id="ans"></div>
+        </section>
+      </div>
+      <div class="qright" id="qfb"><div class="sideowl">🦉<small>${owlHint}</small></div></div>
+    </div>
+    <div class="potwrap"><div class="pots" id="pots">${potsHTML(counts,S.theme,{src:lvlKey(lvl)})}</div></div></div>`;
   renderAnswerArea();
   if(DB.settings.speakQ) setTimeout(()=>{ if(S&&curItem()===it&&S.ph==='ask') sayWord(w, dir.from==='en'?'en':'de'); }, 350);
 }
@@ -1083,40 +1313,45 @@ function finishCard(ok, typedOrHeard){
   showResult(ok, toLvl);
 }
 function showResult(ok, toLvl){
-  const it=curItem(), w=it.w, dir=DIRS[it.d];
-  const praise=['Super!','Genau!','Richtig!','Stark!','Spitze!','Perfekt!','Wow!'];
-  const oops=['Nicht schlimm!','Fast!','Das üben wir nochmal.','Das merkst du dir gleich!'];
-  const toKey=lvlKey(toLvl);
-  const moved = ok ? (toLvl===MAXPOT+1 ? 'Geschafft! Diese Vokabel ist erledigt! 🏆' : `Ab in Topf ${toLvl}!`)
+  const it=curItem(), w=it.w;
+  const fromKey=lvlKey(S.fromLvl), toKey=lvlKey(toLvl), done=toLvl===DONE;
+  S.combo = ok ? (S.combo||0)+1 : 0;
+  const cm = ok ? COMBO[S.combo] : null;
+  const msg = ok ? (cm ? pick(cm) : praiseText()) : pick(OOPS);
+  const moved = ok ? (done ? 'Geschafft! Diese Vokabel ist erledigt! 🏆' : `Ab in Topf ${toLvl}!`)
                    : (toLvl===-1 ? 'Ab in den Falsch-Topf.' : `Einen Topf zurück (Topf ${toLvl}).`);
   const showOverride = !ok && S.mode==='speak';
   $('#ans').innerHTML='';
-  const qh=$('.qhint');
+  const sc=$('#score'); if(sc) sc.innerHTML=scoreHTML();
   $('#qfb').innerHTML=`<div class="fb ${ok?'ok':'bad'}">
-    <div class="fbhead">${ok?'🎉':'🦉'} ${ok?pick(praise):pick(oops)}</div>
+    <div class="fbhead">${ok?pick(EMO):'🦉'} ${esc(msg)}</div>
     <div class="sol"><b>${esc(w.en)}</b> ${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div></div>
     ${audioRow(w,['en','de'])}
     <div class="small" style="font-weight:800;margin-top:6px">${moved}</div>
     ${showOverride?`<button class="link" data-act="override">🎤 Ich habe es richtig gesagt – die App hat mich falsch verstanden</button>`:''}
     <button class="btn next ${ok?'good':''}" data-act="next">Weiter ▶</button></div>`;
-  // Animation: Chip fliegt in den Ziel-Topf
   const card=$('#qcard'); card.classList.add(ok?'hop':'shake');
-  const target=$(`.pot[data-k="${toKey}"]`);
+  // Sofort-Belohnung (bei "erledigt" kommt der große Effekt erst, wenn die Vokabel im Pokal landet)
+  if(ok){
+    if(cm) SND.combo(); else SND.ok(S.combo);
+    if(!done) reward(cm ? 1.8 : 1);
+    cheer(msg, !!cm);
+  }else SND.bad();
+  // Flug: Karte -> Topf, in dem sie lag -> Ziel-Topf
+  const srcEl=$(`.pot[data-k="${fromKey}"]`), dstEl=$(`.pot[data-k="${toKey}"]`);
+  if(srcEl) srcEl.classList.remove('src');
+  const after=sessionCounts(), mid={...after}; mid[toKey]=Math.max(0,(mid[toKey]||0)-1);
   const txt=(DIRS[it.d].from==='en'?w.en:w.de).replace(/\([^)]*\)/g,'').trim().slice(0,22);
-  ok ? SND.ok() : SND.bad();
-  const sess=S, idx=S.i;
-  flyChip(card.getBoundingClientRect(), target, txt, ok, (x,y)=>{
-    // Wurde schon "Weiter" getippt, ist die nächste Karte schon frisch gezeichnet – dann nur noch Konfetti.
-    const pots=$('#pots');
-    if(S===sess && S.i===idx && pots){
-      const counts=sessionCounts();
-      pots.innerHTML=potsHTML(counts,S.theme,{});
-      const nn=$('#newn'); if(nn) nn.textContent=counts.n;
-      popEl($(`.pot[data-k="${toKey}"]`));
-    }
-    if(toLvl===MAXPOT+1){ SND.done(); burst(x,y,26,['🏆','⭐','🎉','✨','💛']); }
-    else if(ok) burst(x,y,9);
-  });
+  const sess=S, idx=S.i, here=()=>S===sess && S.i===idx && $('#pots');
+  const setPots=c=>{ const p=$('#pots'); if(p) p.innerHTML=potsHTML(c,S.theme,{}); };
+  flyJourney({fromRect:card.getBoundingClientRect(), srcEl, dstEl, text:txt, ok,
+    onDrop:()=>{ if(!here()) return; setPots(mid); popEl($(`.pot[data-k="${fromKey}"]`)); },
+    onLand:(x,y)=>{
+      // Wurde schon "Weiter" getippt, ist die nächste Karte frisch gezeichnet – dann nur noch Effekte.
+      if(here()){ setPots(after); popEl($(`.pot[data-k="${toKey}"]`)); }
+      if(done){ SND.done(); burst(x,y,26,['🏆','⭐','🎉','✨','💛']); reward(2.4); cheer('Vokabel erledigt! 🏆',true); }
+      else if(ok) burst(x,y,9);
+    }});
   if(DB.settings.speakA) setTimeout(()=>{ if(S&&S.ph==='result') sayWord(w,'en'); }, 500);
   $('#qfb').scrollIntoView({block:'nearest',behavior:'smooth'});
 }
@@ -1166,7 +1401,7 @@ function renderSummary(){
       <button class="btn ghost big" data-act="home">🏠 Fertig</button>
     </div></div>`;
   window.scrollTo(0,0);
-  setTimeout(()=>burst(innerWidth/2,innerHeight*0.25,n*8,['⭐','🎉','✨','💫']),250);
+  setTimeout(()=>reward(n===3?3:n===2?2:1.2),250);
   if(n===3) SND.done();
 }
 function startWrongOnly(){
@@ -1174,7 +1409,7 @@ function startWrongOnly(){
   if(!wrong.length) return;
   const old=S;
   const queue=shuffle(wrong).map(r=>({w:r.w,d:r.d,pageId:'',retried:false}));
-  S={...old, queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], ph:'ask', tries:0};
+  S={...old, queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], ph:'ask', tries:0, combo:0};
   unlockAudio(); UI.screen='quiz'; render(); window.scrollTo(0,0);
 }
 
@@ -1406,7 +1641,10 @@ const A={
   override:()=>overrideCorrect(),
   next:()=>nextCard(),
   quit:async()=>{ if(await askConfirm('Übung beenden? Dein Fortschritt bleibt gespeichert.','Beenden')){ stopSpeaking(); stopListening(true); S=null; UI.screen=null; render(); } },
-  again:()=>{ startSession(); },
+  again:()=>{ if(S&&S.restart) S.restart(); else startSession(); },
+  startPot:t=>startFromPot(t.dataset.d, t.dataset.k, t.dataset.n),
+  sheetMode:t=>{ DB.settings.mode=t.dataset.v; save(); potSheet(t.dataset.d, t.dataset.k); },
+  testReward:()=>{ unlockAudio(); reward(1.6); cheer(pick(PRAISE)); SND.ok(2); },
   againWrong:()=>startWrongOnly(),
   home:()=>{ S=null; go('learn'); },
   home2:()=>{ importState=null; UI.screen=null; render(); window.scrollTo(0,0); },
@@ -1447,8 +1685,10 @@ const A={
   delWord:async t=>{ if(await askConfirm('Diese Vokabel löschen?','Löschen',true)){ const p=getPage(editPageId); p.words=p.words.filter(w=>w.id!==t.dataset.id); delete DB.prog[t.dataset.id]; save(); closeSheet(); renderEditPage(); } },
   deletePage:async()=>{ const p=getPage(editPageId); if(await askConfirm(`Seite ${p.page} mit ${p.words.length} Vokabeln wirklich löschen?`,'Löschen',true)){
       p.words.forEach(w=>delete DB.prog[w.id]); DB.pages=DB.pages.filter(x=>x!==p); DB.settings.selected=DB.settings.selected.filter(i=>i!==p.id); save(); UI.screen=null; UI.tab='words'; render(); } },
-  exportBackup:()=>{
-    const blob=new Blob([JSON.stringify(DB,null,1)],{type:'application/json'});
+  exportBackup:async()=>{
+    let withKey=false;
+    if(getKey()) withKey=await askConfirm('Soll der API-Schlüssel mit in die Sicherung? Praktisch für dein eigenes zweites Gerät – die Datei dann nicht weitergeben.','Ja, mitnehmen',false,'Nein, ohne');
+    const blob=new Blob([JSON.stringify(withKey?{...DB,_apiKey:getKey()}:DB,null,1)],{type:'application/json'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='vokabel-helden-sicherung-'+todayStr()+'.json';
     document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(a.href); },1000);
   },
@@ -1465,6 +1705,7 @@ document.addEventListener('change',async e=>{
       const j=JSON.parse(await t.files[0].text());
       if(!j||!Array.isArray(j.pages)) throw new Error('format');
       if(await askConfirm('Sicherung laden? Die aktuellen Daten auf diesem Gerät werden ersetzt.','Laden',true)){
+        const kk=j._apiKey; delete j._apiKey; if(kk) setKey(kk);
         DB=j; DB.prog=DB.prog||{}; DB.settings={...DEF,...(DB.settings||{})}; DB.stats=Object.assign({days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}},DB.stats||{});
         save(); toast('Sicherung geladen ✔'); render();
       }
@@ -1487,7 +1728,7 @@ try{
 render();
 
 // Für Tests
-window.__app={nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,get DB(){return DB}};
+window.__app={nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
 </script>
 </body>
 </html>
