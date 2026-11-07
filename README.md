@@ -33,6 +33,10 @@ Vorinstalliert ist Seite 190 („Nice to meet you!“, 39 Einträge).
 
 - **Quiz im Querformat:** Frage links, Lösung rechts, die Töpfe stehen groß fest unten. Die Vokabel fliegt von der Karte in den Topf, in dem sie lag, und von dort in den neuen Topf.
 - **Belohnung:** Konfetti, Feuerwerk, Emoji-Regen oder Ballons plus wechselnde Sprüche (Einstellungen → Belohnung, auch abschaltbar).
+- **Korrigieren mitten in der Aufgabe:** Der kleine ✏️-Knopf oben rechts in der Karte (und „Vokabel korrigieren“ nach dem Prüfen) öffnet direkt das Bearbeiten-Fenster.
+- **Suche / Wörterbuch:** Vokabeln → Suchfeld. Durchsucht alle Seiten (Englisch und Deutsch), mit 🔊 zum Anhören und ✏️ zum Korrigieren.
+- **Mehrzahl und Klammern:** „fish, pl fish“ wird als Wort „fish“ gefragt und gesprochen (Mehrzahl nur als Hinweis). Bei „listen (to)“ gelten „listen“ und „listen to“ als richtig. Hinweise wie „(= I am)“ oder „(wörtlich: …)“ müssen nicht gesagt werden.
+- **Startseite:** Seiten mit gleicher Überschrift (oder gleicher „Gruppe“, einstellbar unter Vokabeln → Seite → ✏️) sind zuklappbar zusammengefasst. Pro Seite steht, wie viele Vokabeln neu, am Üben oder fertig sind.
 - **Gezielt aus einem Topf üben:** Meine Töpfe → Topf antippen → 10, 20 oder alle üben.
 
 ## Neue Seiten hinzufügen (Tochter/Frau können das selbst)

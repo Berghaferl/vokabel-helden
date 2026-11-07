@@ -97,6 +97,24 @@ h2{font-size:22px;font-weight:800}
 .pgmain{flex:1;min-width:0}
 .pgtitle{font-weight:800;font-size:18px}
 .pgsub{font-size:14px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pgst{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:5px;line-height:1.5}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 4px 0 10px;vertical-align:-1px}
+.pgst .dot:first-child{margin-left:0}
+.legend{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.6}
+.legend .dot{margin-left:0;margin-right:5px}
+.grp{margin-bottom:10px}
+.grphead{display:flex;align-items:center;gap:14px;background:#fff;border:3px solid var(--line);border-radius:20px;padding:12px 14px;cursor:pointer}
+.grp.open .grphead{border-color:#CFC4FF}
+.grphead .chev{flex:none;font-size:22px;color:var(--muted);width:22px;text-align:center}
+.grpbody{display:none;margin:8px 0 0 20px;padding-left:12px;border-left:4px solid var(--line)}
+.grp.open .grpbody{display:block}
+.grpbody .pgcard:last-child{margin-bottom:2px}
+.chk.some{background:#E5DEFF;border-color:var(--primary);color:var(--primary-d)}
+.chk.all{background:var(--primary);border-color:var(--primary-d);color:#fff}
+.plnote{font-size:14px;font-weight:700;color:var(--muted);margin-left:6px}
+.editbtn{position:absolute;top:8px;right:8px;width:38px;height:38px;font-size:17px;opacity:.8;z-index:2}
+.srch{width:100%;font-size:17px;padding:12px 14px;border:3px solid var(--line);border-radius:16px;background:#fff;font-family:inherit}
+.srch:focus{outline:none;border-color:var(--primary)}
 .stack{display:flex;height:10px;border-radius:6px;overflow:hidden;background:#EFEAFF}
 .stack i{display:block;height:100%}
 .startbar{
@@ -359,7 +377,7 @@ Cyril's song [sɒŋ] | Cyrils Lied
 
 const AI_PROMPT = `Das Foto zeigt eine Vokabelseite aus einem Englischbuch (Spalten: englisches Wort, Lautschrift in eckigen Klammern, deutsche Übersetzung). Gib jede Vokabel als eigene Zeile aus, genau in diesem Format:
 englisch [Lautschrift] | deutsch
-Regeln: Die Lautschrift genau so übernehmen, wie sie gedruckt ist. Mehrere deutsche Bedeutungen mit Semikolon trennen. Steht keine deutsche Übersetzung da (z. B. bei Zahlen), ergänze die richtige. Keine Beispielsätze, keine Grammatik-Kästen, keine Nummerierung. Die erste Zeile lautet: # Seite <Seitenzahl> | <Überschrift der Lektion>. Antworte nur mit diesen Zeilen, ohne weiteren Text.`;
+Regeln: Die Lautschrift genau so übernehmen, wie sie gedruckt ist. Mehrere deutsche Bedeutungen mit Semikolon trennen. Pluralhinweise („fish, pl fish“) und Klammern („listen (to)“) genau wie im Buch übernehmen. Steht keine deutsche Übersetzung da (z. B. bei Zahlen), ergänze die richtige. Keine Beispielsätze, keine Grammatik-Kästen, keine Nummerierung. Die erste Zeile lautet: # Seite <Seitenzahl> | <Überschrift der Lektion>. Antworte nur mit diesen Zeilen, ohne weiteren Text.`;
 
 /* ---------- Hilfsfunktionen ---------- */
 const $ = (s, el=document) => el.querySelector(s);
@@ -516,6 +534,36 @@ const NUM_EN={'0':'zero','1':'one','2':'two','3':'three','4':'four','5':'five','
 const NUM_DE={'0':'null','1':'eins','2':'zwei','3':'drei','4':'vier','5':'fuenf','6':'sechs','7':'sieben','8':'acht','9':'neun','10':'zehn','11':'elf','12':'zwoelf','13':'dreizehn','14':'vierzehn','15':'fuenfzehn','16':'sechzehn','17':'siebzehn','18':'achtzehn','19':'neunzehn','20':'zwanzig'};
 const HOMO_EN={to:'two',too:'two',won:'one',for:'four',fore:'four',ate:'eight',wear:'where',ware:'where',meat:'meet',eye:'i',u:'you',ewe:'you',hey:'hi',hay:'hi'};
 const stripParens = s => String(s).replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
+// Mehrzahl-Hinweis abtrennen: "fish, pl fish" / "fish (pl fish)" / "people (pl)" -> Wort + Mehrzahl
+function splitPl(str){
+  const t=String(str==null?'':str).trim();
+  const m=t.match(/^(.*?)\s*(?:[,;]\s*|\(\s*|\s)pl\.?:?(?:\s+([^()]*?))?\s*\)?\s*$/i);
+  if(!m || !m[1].trim()) return {head:t, pl:''};
+  return {head:m[1].trim().replace(/[,;]\s*$/,''), pl:(m[2]||'').trim()};
+}
+// Klammern: Inhalt ist wahlweise dabei oder nicht. "listen (to)" -> "listen" und "listen to".
+// Hinweise wie (= I am), (wörtlich: ...), (Pl.), (D) werden nie mitgesprochen/mitverlangt.
+const SKIP_PAR=/^(=|w[öo]rtl|pl\b|sg\b|bes\b|auch\b|meist|oft\b|z\.\s?b|etw|jdn|jdm|jd\b|d\b|akk|dat|brit|amer|infml|informal)/i;
+function parenVariants(str, maxWords){
+  const t=String(str==null?'':str), groups=[], re=/\(([^)]*)\)/g; let m;
+  while((m=re.exec(t))){
+    const c=m[1].trim();
+    groups.push({a:m.index, b:m.index+m[0].length, c, opt: !!c && !SKIP_PAR.test(c) && !/[;,\/]/.test(c) && c.split(/\s+/).length<=maxWords});
+  }
+  const opt=groups.filter(g=>g.opt).slice(0,3), out=new Set();
+  for(let mask=0; mask<(1<<opt.length); mask++){
+    let r='', pos=0;
+    groups.forEach(g=>{ r+=t.slice(pos,g.a); pos=g.b; const i=opt.indexOf(g); if(i>=0 && ((mask>>i)&1)) r+=g.c; });
+    r+=t.slice(pos);
+    out.add(r.replace(/\s+/g,' ').trim());
+  }
+  return [...out].filter(Boolean);
+}
+const longestVariant=(str,maxW)=>parenVariants(str,maxW).sort((a,b)=>b.length-a.length)[0]||'';
+const enDisp=w=>splitPl(w.en).head;
+const enPl=w=>splitPl(w.en).pl;
+const enListTxt=w=>enDisp(w)+(enPl(w)?' · Mehrzahl: '+enPl(w):'');
+const plNoteHTML=w=>enPl(w)?` <span class="plnote">Mehrzahl: ${esc(enPl(w))}</span>`:'';
 function normBase(s){
   return String(s).toLowerCase().replace(/[’‘´`]/g,"'")
     .replace(/ß/g,'ss').replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue')
@@ -543,15 +591,16 @@ function answersFor(w, lang){
       if(y) set.add(y);
     });
   };
+  const addP=(str,mw)=>parenVariants(str,mw).forEach(add);
   if(lang==='en'){
-    add(stripParens(w.en));
-    for(const m of w.en.matchAll(/\(\s*=\s*([^)]*)\)/g)) add(m[1]);
-    (w.enOk||[]).forEach(add);
+    addP(splitPl(w.en).head,3);
+    for(const m of String(w.en).matchAll(/\(\s*=\s*([^)]*)\)/g)) add(m[1]);
+    (w.enOk||[]).forEach(x=>addP(x,3));
   }else{
-    const base=stripParens(w.de);
-    add(base);
-    if(w.deOk && w.deOk.length) w.deOk.forEach(add);
-    else base.split(/[;,\/]/).map(x=>x.trim()).filter(x=>x.length>=2).forEach(add);
+    const parts=parenVariants(w.de,2);
+    parts.forEach(add);
+    if(w.deOk && w.deOk.length) w.deOk.forEach(x=>addP(x,2));
+    else parts.forEach(v=>v.split(/[;,\/]/).map(x=>x.trim()).filter(x=>x.length>=2).forEach(add));
   }
   return [...set];
 }
@@ -567,13 +616,13 @@ function lev(a,b){
 }
 function tolerance(len){ return len<=4 ? 0 : len<=8 ? 1 : 2; }
 // Gesprochen: großzügig (Erkennung ist nicht perfekt)
-function matchSpoken(w, lang, heardList){
+function matchSpoken(w, lang, heardList, strict){
   const acc=answersFor(w,lang).map(a=>canon(a,lang,true));
   for(const h of heardList){
     const hc=canon(normBase(h),lang,true);
     if(!hc) continue;
     for(const a of acc){
-      if(hc===a || lev(hc,a)<=tolerance(a.length)) return true;
+      if(hc===a || (!strict && lev(hc,a)<=tolerance(a.length))) return true;
     }
   }
   return false;
@@ -586,7 +635,7 @@ function matchTyped(w, lang, typed){
 }
 function typedHint(w, lang){
   const ans=answersFor(w,lang).sort((a,b)=>b.length-a.length)[0] || '';
-  const full = lang==='en' ? stripParens(w.en) : stripParens(w.de).split(/[;,\/]/)[0].trim();
+  const full = lang==='en' ? stripParens(enDisp(w)) : stripParens(w.de).split(/[;,\/]/)[0].trim();
   return full.split('').map((ch,i)=> i===0 ? ch : (/[A-Za-zÄÖÜäöüß]/.test(ch) ? '_' : ch)).join(' ');
 }
 
@@ -608,8 +657,8 @@ function bestVoice(lang){
   return [...pool].sort((a,b)=>score(b)-score(a))[0];
 }
 function speakText(w, lang){
-  if(lang==='en') return stripParens(w.enSay || w.en).replace(/\.{2,}|…/g,' ').replace(/\s+/g,' ').trim();
-  return stripParens(w.deSay || w.de).replace(/\.{2,}|…/g,' ').replace(/\//g,', ').replace(/\s+/g,' ').trim();
+  if(lang==='en') return longestVariant(splitPl(w.enSay || w.en).head,3).replace(/\.{2,}|…/g,' ').replace(/\s+/g,' ').trim();
+  return longestVariant(w.deSay || w.de,2).replace(/\.{2,}|…/g,' ').replace(/\//g,', ').replace(/\s+/g,' ').trim();
 }
 let speakToken=0;
 function say(text, lang, rate){
@@ -1004,25 +1053,63 @@ function startCount(){
   const n=DB.settings.size==='all' ? items.length : Math.min(+DB.settings.size, items.length);
   return {pool:items.length, n};
 }
+// Seiten gruppieren (manuelle Gruppe, sonst Überschrift) und Status pro Vokabel
+function pageGroups(){
+  const map=new Map();
+  DB.pages.forEach(p=>{
+    const name=String(p.group||p.title||'').trim(), key=name.toLowerCase()||'_';
+    if(!map.has(key)) map.set(key,{key,name:name||'Ohne Überschrift',pages:[]});
+    map.get(key).pages.push(p);
+  });
+  return [...map.values()];
+}
+function groupDefaultOpen(key){ const g=pageGroups().find(x=>x.key===key); return !!g && g.pages.some(p=>DB.settings.selected.includes(p.id)); }
+function wordStatus(words,dirs){
+  const r={n:words.length,neu:0,ueben:0,fertig:0};
+  words.forEach(w=>{ const ls=dirs.map(d=>getLvl(w.id,d));
+    if(ls.every(l=>l===0)) r.neu++; else if(ls.every(l=>l===DONE)) r.fertig++; else r.ueben++; });
+  return r;
+}
+function statusHTML(st){
+  const seg=[[st.neu,'#CFC8F0'],[st.ueben,'#FFB454'],[st.fertig,'#2ED3A5']].map(([v,c])=>v&&st.n?`<i style="width:${v/st.n*100}%;background:${c}"></i>`:'').join('');
+  return `<div class="pgst"><span class="dot" style="background:#CFC8F0"></span>${st.neu} neu<span class="dot" style="background:#FFB454"></span>${st.ueben} am Üben<span class="dot" style="background:#2ED3A5"></span>${st.fertig} fertig</div><div class="stack">${seg}</div>`;
+}
 function viewLearn(){
   const st=DB.settings, sel=new Set(selectedPages());
   const nm=st.name?esc(st.name):'';
   const hello=[`Hallo${nm?' '+nm:''}! Was üben wir heute?`,`Auf geht's${nm?', '+nm:''}! Welche Seiten sollen es sein?`,`Bereit für ein paar Vokabeln${nm?', '+nm:''}?`][new Date().getDate()%3];
   const sk=streak();
-  const pages=DB.pages.map(p=>{
-    const items=buildItems([p.id],['de-en','en-de'],true), c=countLevels(items), tot=items.length||1;
-    const seg=['w','n',1,2,3,4,5].map(k=>c[k]?`<i style="width:${c[k]/tot*100}%;background:${POTCOL[k]}"></i>`:'').join('');
+  const dirs=dirsFromSetting();
+  const pageCard=p=>{
+    const s=wordStatus(p.words,dirs);
     return `<div class="pgcard ${sel.has(p.id)?'sel':''}" data-act="togglePage" data-id="${p.id}">
       <div class="chk">✓</div>
       <div class="pgmain"><div class="pgtitle">Seite ${p.page}</div>
-      <div class="pgsub">${esc(p.title||'')} · ${p.words.length} Vokabeln</div>
-      <div class="stack">${seg}</div></div></div>`;
+      <div class="pgsub">${esc(p.title||'')}${p.title?' · ':''}${s.n} Vokabeln</div>
+      ${statusHTML(s)}</div></div>`;
+  };
+  const pages=pageGroups().map(g=>{
+    if(g.pages.length===1) return pageCard(g.pages[0]);
+    const ids=g.pages.map(p=>p.id), nSel=ids.filter(i=>sel.has(i)).length;
+    const state=nSel===0?'':nSel===ids.length?'all':'some';
+    const o=DB.settings.open||{}, open=g.key in o ? o[g.key] : groupDefaultOpen(g.key);
+    const nums=g.pages.map(p=>p.page), lo=Math.min(...nums), hi=Math.max(...nums);
+    const s=wordStatus(g.pages.flatMap(p=>p.words),dirs);
+    return `<div class="grp ${open?'open':''}">
+      <div class="grphead" data-act="toggleGroup" data-key="${esc(g.key)}">
+        <div class="chk ${state}" data-act="selGroup" data-key="${esc(g.key)}" aria-label="Ganze Gruppe wählen">${state==='all'?'✓':state==='some'?'–':''}</div>
+        <div class="pgmain"><div class="pgtitle">${esc(g.name)}</div>
+          <div class="pgsub">${lo===hi?'Seite '+lo:'Seiten '+lo+'–'+hi} · ${g.pages.length} Seiten · ${s.n} Vokabeln${nSel?` · ${nSel} gewählt`:''}</div>
+          ${statusHTML(s)}</div>
+        <div class="chev">${open?'▾':'▸'}</div></div>
+      <div class="grpbody">${g.pages.map(pageCard).join('')}</div></div>`;
   }).join('');
   return `
   <div class="hero"><div class="owl">🦉</div><div class="bubble">${hello}</div></div>
   <div class="chips"><span class="chip-s">🔥 ${sk} ${sk===1?'Tag':'Tage'} in Folge</span><span class="chip-s">✅ Heute: ${DB.stats.today.d===todayStr()?DB.stats.today.n:0} beantwortet</span></div>
   <div class="rowtools"><h2>Welche Seiten?</h2>
     <div><button class="link" data-act="selAll">Alle</button><button class="link" data-act="selNone">Keine</button></div></div>
+  <p class="legend"><span class="dot" style="background:#CFC8F0"></span><b>neu</b> = noch nie gefragt &nbsp; <span class="dot" style="background:#FFB454"></span><b>am Üben</b> = liegt in einem Topf &nbsp; <span class="dot" style="background:#2ED3A5"></span><b>fertig</b> = 5× richtig (Zahlen für die gewählte Richtung)</p>
   ${pages || `<div class="panel">Noch keine Vokabeln. Unter „Vokabeln“ kannst du Seiten hinzufügen.</div>`}
   <div class="panel"><h3>Richtung</h3><div class="seg">
     ${[['de-en','🇩🇪 → 🇬🇧','Deutsch fragen'],['en-de','🇬🇧 → 🇩🇪','Englisch fragen'],['mix','🔀 Gemischt','beides']].map(([v,t,s])=>`<button data-act="setOpt" data-k="dir" data-v="${v}" class="${st.dir===v?'on':''}">${t}<small>${s}</small></button>`).join('')}
@@ -1072,18 +1159,44 @@ function potSheet(d, k){
     ${N?`<div class="small" style="font-weight:800;margin:10px 0 6px">Jetzt üben – wie viele?</div>
       <div class="btns" style="margin-top:0">${sizes.map(x=>`<button class="btn" data-act="startPot" data-d="${d}" data-k="${k}" data-n="${x}">${x}</button>`).join('')}<button class="btn good" data-act="startPot" data-d="${d}" data-k="${k}" data-n="all">Alle ${N}</button></div>
       <div class="seg" style="margin-top:10px">${modes.map(([v,t])=>`<button data-act="sheetMode" data-v="${v}" data-d="${d}" data-k="${k}" class="${DB.settings.mode===v?'on':''}">${t}</button>`).join('')}</div>`:''}
-    <div style="margin-top:14px">${N ? list.map(i=>`<div class="wrow"><div class="t"><span class="en">${esc(from==='en'?i.w.en:i.w.de)}</span><div class="de">${esc(from==='en'?i.w.de:i.w.en)}</div></div></div>`).join('') : '<p class="muted">Hier liegt noch nichts.</p>'}</div>
+    <div style="margin-top:14px">${N ? list.map(i=>`<div class="wrow"><div class="t"><span class="en">${esc(from==='en'?enListTxt(i.w):i.w.de)}</span><div class="de">${esc(from==='en'?i.w.de:enListTxt(i.w))}</div></div></div>`).join('') : '<p class="muted">Hier liegt noch nichts.</p>'}</div>
     <div class="btns"><button class="btn ghost" data-act="closeSheet">Schließen</button></div>`);
 }
 
 /* ----- Vokabeln verwalten ----- */
+function searchHTML(query){
+  const q=normBase(query||''); if(!q) return '';
+  const hits=[];
+  DB.pages.forEach(p=>p.words.forEach(w=>{
+    const hay=normBase([w.en,w.de,...(w.deOk||[]),...(w.enOk||[])].join(' | '));
+    if(!hay.includes(q)) return;
+    const starts = normBase(enDisp(w)).startsWith(q) || normBase(w.de).startsWith(q);
+    hits.push({p,w,r:starts?0:1});
+  }));
+  hits.sort((a,b)=>a.r-b.r);
+  if(!hits.length) return `<div class="panel">Nichts gefunden für „${esc(query.trim())}“.</div>`;
+  const shown=hits.slice(0,60);
+  return `<div class="panel"><div class="small muted" style="margin-bottom:4px">${hits.length} Treffer${hits.length>shown.length?' (die ersten '+shown.length+')':''}</div>
+    ${shown.map(({p,w})=>`<div class="wrow"><div class="t"><span class="en">${esc(enDisp(w))}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}${plNoteHTML(w)}<div class="de">${esc(w.de)}</div>
+      <div class="small muted">Seite ${p.page}${p.title?' · '+esc(p.title):''}</div></div>
+      <button class="icon" data-act="sayRow" data-id="${esc(w.id)}" aria-label="Anhören">🔊</button>
+      <button class="icon" data-act="editFound" data-id="${esc(w.id)}" aria-label="Bearbeiten">✏️</button></div>`).join('')}</div>`;
+}
+function renderSearchResults(){
+  const r=$('#wres'); if(r) r.innerHTML=searchHTML(UI.wq);
+  const pg=$('#wpages'); if(pg) pg.style.display = normBase(UI.wq||'') ? 'none' : '';
+}
 function viewWords(){
   const rows=DB.pages.map(p=>`<div class="pgcard" data-act="editPage" data-id="${p.id}" style="cursor:pointer">
     <div class="pgmain"><div class="pgtitle">Seite ${p.page}</div><div class="pgsub">${esc(p.title||'')} · ${p.words.length} Vokabeln</div></div><div style="font-size:22px">✏️</div></div>`).join('');
-  return `<div class="hero"><div class="owl">📚</div><div class="bubble">Hier verwaltest du die Vokabeln.</div></div>
-  <button class="btn big" style="width:100%;margin-bottom:16px" data-act="openImport">➕ Neue Seite hinzufügen</button>
+  const q=normBase(UI.wq||'');
+  return `<div class="hero"><div class="owl">📚</div><div class="bubble">Hier verwaltest du die Vokabeln. Oben kannst du alles durchsuchen – wie in einem Wörterbuch.</div></div>
+  <input class="srch" id="wsearch" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="🔎 Suchen (Englisch oder Deutsch)" value="${esc(UI.wq||'')}" aria-label="Vokabeln suchen">
+  <div id="wres" style="margin-top:12px">${searchHTML(UI.wq)}</div>
+  <div id="wpages" ${q?'style="display:none"':''}>
+  <button class="btn big" style="width:100%;margin:16px 0" data-act="openImport">➕ Neue Seite hinzufügen</button>
   <div class="rowtools"><h2>Meine Seiten</h2></div>
-  ${rows||'<div class="panel">Noch keine Seiten.</div>'}
+  ${rows||'<div class="panel">Noch keine Seiten.</div>'}</div>
   <div class="panel"><h3>💾 Sicherung</h3>
     <p class="small muted" style="margin:0 0 10px">Der Lernstand liegt nur auf diesem Gerät. Mach ab und zu eine Sicherung. Damit lässt sich auch alles auf ein anderes Gerät übertragen.</p>
     <div class="seg"><button data-act="exportBackup">📤 Sicherung speichern</button><button data-act="importBackup">📥 Sicherung laden</button></div>
@@ -1171,6 +1284,17 @@ function audioRow(w, langs){
   if(langs.includes('de')) out.push(b('de','🇩🇪 Deutsch'));
   return `<div class="audio">${out.join('')}</div>`;
 }
+function qipaHTML(w,dir){ return dir.from==='en' ? (w.ipa?esc('['+w.ipa+']'):'')+plNoteHTML(w) : ''; }
+function solHTML(w){ return `<div class="sol"><b>${esc(enDisp(w))}</b> ${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}${plNoteHTML(w)}<div class="de">${esc(w.de)}</div></div>`; }
+function refreshQuizWord(){
+  if(!S||!curItem()) return;
+  const it=curItem(), w=it.w, dir=DIRS[it.d];
+  const pr=$('#qprompt'); if(pr) pr.textContent = dir.from==='en' ? enDisp(w) : w.de;
+  const ip=$('#qcard .qipa'); if(ip) ip.innerHTML=qipaHTML(w,dir);
+  if(S.ph==='ask') renderAnswerArea();
+  else if(S.ph==='self'){ S.ph='ask'; A.reveal(); }
+  else if(S.ph==='result'){ const sol=$('#qfb .sol'); if(sol) sol.outerHTML=solHTML(w); }
+}
 function unitOf(){ return S.dirs.length===1 ? 'Vokabel' : 'Frage'; }
 function scoreHTML(){ return `⭐ ${S.right}${(S.combo||0)>=2?` · 🔥 ${S.combo}`:''}`; }
 function renderQuiz(){
@@ -1180,8 +1304,7 @@ function renderQuiz(){
   const lvl=getLvl(w.id,it.d); S.fromLvl=lvl;
   const counts=sessionCounts();
   const pct=Math.round(S.i/S.queue.length*100);
-  const promptText = dir.from==='en' ? w.en : w.de;
-  const showIpa = dir.from==='en' && w.ipa;
+  const promptText = dir.from==='en' ? enDisp(w) : w.de;
   const owlHint = S.mode==='speak' ? 'Sag es laut!' : S.mode==='write' ? 'Schreib es auf!' : 'Denk kurz nach …';
   app.innerHTML=`<div class="quiz">
     <div class="qtop"><button class="icon" data-act="quit" aria-label="Beenden">✕</button>
@@ -1190,9 +1313,10 @@ function renderQuiz(){
       <div class="qleft">
         <div class="qdir">${FLAG[dir.from]} ${LANGNAME[dir.from]} → ${FLAG[dir.to]} ${LANGNAME[dir.to]}</div>
         <section class="qcard" id="qcard">
+          <button class="icon editbtn" data-act="editCur" aria-label="Vokabel korrigieren" title="Vokabel korrigieren">✏️</button>
           <div class="qhint">${unitOf()} ${S.i+1} von ${S.queue.length}${it.retried?' · nochmal!':''}</div>
           <div class="qprompt" id="qprompt">${esc(promptText)}</div>
-          <div class="qipa">${showIpa?esc('['+w.ipa+']'):''}</div>
+          <div class="qipa">${qipaHTML(w,dir)}</div>
           ${audioRow(w,[dir.from])}
           <div class="ans" id="ans"></div>
         </section>
@@ -1256,21 +1380,32 @@ function startListening(){
   if(rec){ stopListening(false); return; }
   stopSpeaking();
   const it=curItem(), dir=DIRS[it.d];
-  let finalList=[], heard='', err='', timer=null;
+  let finalList=[], heard='', err='', timer=null, early=null;
   try{
     rec=new SR(); rec.lang = dir.to==='en' ? 'en-GB' : 'de-DE';
     rec.interimResults=true; rec.maxAlternatives=5; rec.continuous=false;
   }catch(e){ rec=null; toast('Mikrofon konnte nicht gestartet werden.'); return; }
   const r=rec;
   r.onstart=()=>{ const m=$('#micbtn'); if(m) m.classList.add('live'); const l=$('#miclabel'); if(l) l.textContent='Ich höre zu … sprich jetzt!'; };
+  const judgeNow=list=>{
+    clearTimeout(early); clearTimeout(timer);
+    stopListening(true);               // rec = null; das spätere onend wird ignoriert
+    const m=$('#micbtn'); if(m) m.classList.remove('live');
+    if(S && S.ph==='ask' && curItem()===it) judgeSpoken(list);
+  };
   r.onresult=e=>{
+    if(rec!==r) return;
     const res=e.results[e.results.length-1]; heard=res[0].transcript;
     const hd=$('#heard'); if(hd) hd.textContent='„'+heard+'“';
-    if(res.isFinal){ finalList=[...res].map(a=>a.transcript); }
+    const alts=[...res].map(a=>a.transcript);
+    clearTimeout(early);
+    if(res.isFinal){ finalList=alts; judgeNow(alts); return; }   // sofort, nicht auf das Ende der Erkennung warten
+    // Zwischenergebnis passt schon genau? Dann nach kurzer Stabilitäts-Pause gleich werten.
+    if(matchSpoken(it.w,dir.to,alts,true)) early=setTimeout(()=>{ if(rec===r) judgeNow(alts); },450);
   };
   r.onerror=e=>{ err=e.error||'error'; };
   r.onend=()=>{
-    clearTimeout(timer);
+    clearTimeout(timer); clearTimeout(early);
     if(rec!==r) return;
     rec=null;
     const m=$('#micbtn'); if(m) m.classList.remove('live');
@@ -1325,10 +1460,11 @@ function showResult(ok, toLvl){
   const sc=$('#score'); if(sc) sc.innerHTML=scoreHTML();
   $('#qfb').innerHTML=`<div class="fb ${ok?'ok':'bad'}">
     <div class="fbhead">${ok?pick(EMO):'🦉'} ${esc(msg)}</div>
-    <div class="sol"><b>${esc(w.en)}</b> ${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div></div>
+    ${solHTML(w)}
     ${audioRow(w,['en','de'])}
     <div class="small" style="font-weight:800;margin-top:6px">${moved}</div>
     ${showOverride?`<button class="link" data-act="override">🎤 Ich habe es richtig gesagt – die App hat mich falsch verstanden</button>`:''}
+    <button class="link" data-act="editCur">✏️ Vokabel korrigieren</button>
     <button class="btn next ${ok?'good':''}" data-act="next">Weiter ▶</button></div>`;
   const card=$('#qcard'); card.classList.add(ok?'hop':'shake');
   // Sofort-Belohnung (bei "erledigt" kommt der große Effekt erst, wenn die Vokabel im Pokal landet)
@@ -1341,7 +1477,7 @@ function showResult(ok, toLvl){
   const srcEl=$(`.pot[data-k="${fromKey}"]`), dstEl=$(`.pot[data-k="${toKey}"]`);
   if(srcEl) srcEl.classList.remove('src');
   const after=sessionCounts(), mid={...after}; mid[toKey]=Math.max(0,(mid[toKey]||0)-1);
-  const txt=(DIRS[it.d].from==='en'?w.en:w.de).replace(/\([^)]*\)/g,'').trim().slice(0,22);
+  const txt=(DIRS[it.d].from==='en'?enDisp(w):w.de).replace(/\([^)]*\)/g,'').trim().slice(0,22);
   const sess=S, idx=S.i, here=()=>S===sess && S.i===idx && $('#pots');
   const setPots=c=>{ const p=$('#pots'); if(p) p.innerHTML=potsHTML(c,S.theme,{}); };
   flyJourney({fromRect:card.getBoundingClientRect(), srcEl, dstEl, text:txt, ok,
@@ -1394,7 +1530,7 @@ function renderSummary(){
     <div class="stars">${[1,2,3].map(i=>`<span class="${i<=n?'':'off'}">⭐</span>`).join('')}</div>
     <p style="font-size:20px;font-weight:800;margin:4px 0">${S.firstTry} von ${S.firstTotal} gleich richtig</p>
     ${done?`<p style="font-weight:800;color:var(--sun-d);margin:4px 0">🏆 ${done} Vokabel${done>1?'n':''} erledigt!</p>`:''}
-    ${wrong.length?`<div class="sumlist"><h3 style="margin-bottom:8px">Das üben wir nochmal:</h3>${wrong.map(r=>`<div class="sumrow bad"><b>${esc(r.w.en)}</b><span>${esc(r.w.de)}</span></div>`).join('')}</div>`:''}
+    ${wrong.length?`<div class="sumlist"><h3 style="margin-bottom:8px">Das üben wir nochmal:</h3>${wrong.map(r=>`<div class="sumrow bad"><b>${esc(enDisp(r.w))}</b><span>${esc(r.w.de)}</span></div>`).join('')}</div>`:''}
     <div style="display:grid;gap:12px;margin-top:18px">
       <button class="btn big" data-act="again">🔁 Nochmal üben</button>
       ${wrong.length?`<button class="btn big sun" data-act="againWrong">💪 Nur die falschen</button>`:''}
@@ -1594,21 +1730,32 @@ function renderEditPage(){
     <div class="subtop"><button class="icon" data-act="home2">←</button><h2>Seite ${p.page}</h2></div>
     <div class="panel"><div class="two"><label class="field"><span>Seite</span><input id="epPage" type="number" inputmode="numeric" value="${p.page}"></label>
       <label class="field"><span>Überschrift</span><input id="epTitle" type="text" value="${esc(p.title||'')}"></label></div>
+      <label class="field"><span>Gruppe (optional, z. B. „Unit 1“)</span><input id="epGroup" type="text" value="${esc(p.group||'')}" placeholder="${esc(p.title||'')}"></label>
+      <p class="small muted" style="margin:-4px 0 10px">Seiten mit gleicher Gruppe (sonst gleicher Überschrift) werden auf der Startseite zusammengefasst und lassen sich zuklappen.</p>
       <button class="btn sm" data-act="savePageMeta">Speichern</button></div>
     <div class="panel"><h3>${p.words.length} Vokabeln</h3>
-      ${p.words.map(w=>`<div class="wrow"><div class="t"><span class="en">${esc(w.en)}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div></div>
+      ${p.words.map(w=>`<div class="wrow"><div class="t"><span class="en">${esc(enListTxt(w))}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div></div>
         <button class="icon" data-act="editWord" data-id="${esc(w.id)}" aria-label="Bearbeiten">✏️</button></div>`).join('')}
       <button class="btn good" style="margin-top:12px;width:100%" data-act="addWord">➕ Vokabel hinzufügen</button></div>
     <button class="btn bad" style="width:100%" data-act="deletePage">🗑️ Ganze Seite löschen</button></div>`;
 }
-function wordForm(w){
+let wfCtx='page';
+function findWord(id){ for(const p of DB.pages){ const w=p.words.find(x=>x.id===id); if(w) return {p,w}; } return null; }
+function afterWordSave(){
+  if(wfCtx==='quiz') refreshQuizWord();
+  else if(wfCtx==='search') renderSearchResults();
+  else renderEditPage();
+}
+function wordForm(w, ctx){
+  wfCtx=ctx||'page';
   w=w||{en:'',ipa:'',de:'',deOk:[]};
   showSheet(`<h3>${w.id?'Vokabel bearbeiten':'Neue Vokabel'}</h3>
     <label class="field"><span>Englisch</span><input id="wfEn" type="text" value="${esc(w.en)}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <label class="field"><span>Lautschrift (optional)</span><input id="wfIpa" type="text" value="${esc(w.ipa)}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <label class="field"><span>Deutsch</span><input id="wfDe" type="text" value="${esc(w.de)}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <label class="field"><span>Weitere richtige deutsche Antworten (mit ; trennen, optional)</span><input id="wfOk" type="text" value="${esc((w.deOk||[]).join('; '))}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
-    <div class="btns">${w.id?'<button class="btn bad" data-act="delWord" data-id="'+esc(w.id)+'">Löschen</button>':''}<button class="btn ghost" data-act="closeSheet">Abbrechen</button><button class="btn good" data-act="saveWord" data-id="${esc(w.id||'')}">Speichern</button></div>`);
+    <p class="small muted" style="margin:-4px 0 10px">Tipp: Mehrzahl-Hinweise („fish, pl fish“) und Klammern („listen (to)“) versteht die App – bei Klammern gilt beides als richtig.</p>
+    <div class="btns">${w.id&&wfCtx!=='quiz'?'<button class="btn bad" data-act="delWord" data-id="'+esc(w.id)+'">Löschen</button>':''}<button class="btn ghost" data-act="closeSheet">Abbrechen</button><button class="btn good" data-act="saveWord" data-id="${esc(w.id||'')}">Speichern</button></div>`);
 }
 
 /* =====================================================================
@@ -1631,7 +1778,7 @@ const A={
   giveup:()=>{ if(S&&S.ph==='ask') finishCard(false); },
   reveal:()=>{
     if(S.ph!=='ask') return; S.ph='self'; const it=curItem(), w=it.w;
-    $('#ans').innerHTML=`<div class="sol" style="margin:6px 0 10px"><b>${esc(DIRS[it.d].to==='en'?w.en:w.de)}</b>${DIRS[it.d].to==='en'&&w.ipa?` <span class="ipa" style="color:var(--primary-d)">[${esc(w.ipa)}]</span>`:''}</div>
+    $('#ans').innerHTML=`<div class="sol" style="margin:6px 0 10px"><b>${esc(DIRS[it.d].to==='en'?enDisp(w):w.de)}</b>${DIRS[it.d].to==='en'&&w.ipa?` <span class="ipa" style="color:var(--primary-d)">[${esc(w.ipa)}]</span>`:''}${DIRS[it.d].to==='en'?plNoteHTML(w):''}</div>
       <div class="muted small" style="margin-bottom:8px">Wusstest du es?</div>
       <div class="seg"><button class="btn bad" style="flex:1" data-act="selfNo">😕 Nein</button><button class="btn good" style="flex:1" data-act="selfYes">😀 Ja!</button></div>`;
     sayWord(w, DIRS[it.d].to==='en'?'en':'de');
@@ -1670,19 +1817,27 @@ const A={
   editPage:t=>{ editPageId=t.dataset.id; UI.screen='editpage'; render(); window.scrollTo(0,0); },
   savePageMeta:()=>{ const p=getPage(editPageId); const n=+($('#epPage').value)||p.page; const t=$('#epTitle').value.trim();
     if(n!==p.page && DB.pages.some(x=>x!==p&&x.page===n)){ toast('Diese Seitenzahl gibt es schon.'); return; }
+    const gr=($('#epGroup')||{}).value; if(gr!=null){ gr.trim()?p.group=gr.trim():delete p.group; }
     p.page=n; p.title=t; DB.pages.sort((a,b)=>a.page-b.page); save(); toast('Gespeichert'); renderEditPage(); },
-  editWord:t=>wordForm(getPage(editPageId).words.find(w=>w.id===t.dataset.id)),
-  addWord:()=>wordForm(null),
+  editWord:t=>wordForm(getPage(editPageId).words.find(w=>w.id===t.dataset.id),'page'),
+  addWord:()=>wordForm(null,'page'),
   saveWord:t=>{
-    const p=getPage(editPageId), en=$('#wfEn').value.trim(), de=$('#wfDe').value.trim();
+    const found=t.dataset.id ? findWord(t.dataset.id) : null;
+    const p=found ? found.p : getPage(editPageId), en=$('#wfEn').value.trim(), de=$('#wfDe').value.trim();
     if(!en||!de){ toast('Englisch und Deutsch ausfüllen.'); return; }
     const ipa=$('#wfIpa').value.trim().replace(/^\[|\]$/g,''), ok=$('#wfOk').value.split(';').map(s=>s.trim()).filter(Boolean);
-    let w=t.dataset.id && p.words.find(x=>x.id===t.dataset.id);
+    let w=found && found.w;
     if(w){ w.en=en; w.ipa=ipa; w.de=de; ok.length?w.deOk=ok:delete w.deOk; }
     else{ let id=p.id+':'+slug(en), k=2; while(p.words.some(x=>x.id===id)) id=p.id+':'+slug(en)+'#'+(k++); w={id,en,ipa,de}; if(ok.length) w.deOk=ok; p.words.push(w); }
-    save(); closeSheet(); renderEditPage();
+    save(); closeSheet(); afterWordSave();
   },
-  delWord:async t=>{ if(await askConfirm('Diese Vokabel löschen?','Löschen',true)){ const p=getPage(editPageId); p.words=p.words.filter(w=>w.id!==t.dataset.id); delete DB.prog[t.dataset.id]; save(); closeSheet(); renderEditPage(); } },
+  delWord:async t=>{ const f=findWord(t.dataset.id); if(f && await askConfirm('Diese Vokabel löschen?','Löschen',true)){ f.p.words=f.p.words.filter(w=>w.id!==t.dataset.id); delete DB.prog[t.dataset.id]; save(); closeSheet(); afterWordSave(); } },
+  editCur:()=>{ if(!S) return; const it=curItem(); const f=it&&findWord(it.w.id); if(!f) return; stopListening(true); const m=$('#micbtn'); if(m) m.classList.remove('live'); wordForm(f.w,'quiz'); },
+  editFound:t=>{ const f=findWord(t.dataset.id); if(f) wordForm(f.w,'search'); },
+  sayRow:t=>{ unlockAudio(); const f=findWord(t.dataset.id); if(f) say(speakText(f.w,'en'),'en',DB.settings.rate); },
+  toggleGroup:t=>{ const k=t.dataset.key, o=DB.settings.open||{}; const cur=k in o ? o[k] : groupDefaultOpen(k); DB.settings.open={...o,[k]:!cur}; save(); render(); },
+  selGroup:t=>{ const g=pageGroups().find(x=>x.key===t.dataset.key); if(!g) return; const ids=g.pages.map(p=>p.id), sel=DB.settings.selected, all=ids.every(i=>sel.includes(i));
+    DB.settings.selected = all ? sel.filter(i=>!ids.includes(i)) : [...new Set([...sel,...ids])]; save(); render(); },
   deletePage:async()=>{ const p=getPage(editPageId); if(await askConfirm(`Seite ${p.page} mit ${p.words.length} Vokabeln wirklich löschen?`,'Löschen',true)){
       p.words.forEach(w=>delete DB.prog[w.id]); DB.pages=DB.pages.filter(x=>x!==p); DB.settings.selected=DB.settings.selected.filter(i=>i!==p.id); save(); UI.screen=null; UI.tab='words'; render(); } },
   exportBackup:async()=>{
@@ -1716,6 +1871,7 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.id==='wsearch'){ UI.wq=t.value; renderSearchResults(); return; }
   if(t.dataset && t.dataset.range){ DB.settings[t.dataset.range]=+t.value; save(); }
   if(t.dataset && t.dataset.text){ DB.settings[t.dataset.text]=t.value; save(); }
 });
@@ -1728,7 +1884,7 @@ try{
 render();
 
 // Für Tests
-window.__app={nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
+window.__app={splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
 </script>
 </body>
 </html>
