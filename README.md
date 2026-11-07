@@ -31,6 +31,15 @@ Vorinstalliert ist Seite 190 („Nice to meet you!“, 39 Einträge).
 
 ## Neue Seiten hinzufügen (Tochter/Frau können das selbst)
 
+### Mit Foto-Scan (empfohlen)
+
+Einmalig, durch ein Elternteil: Unter **Einstellungen → Foto-Scan** einen Claude-API-Schlüssel eintragen (Anleitung steht dort in der App). Der Schlüssel liegt nur auf diesem Gerät, nicht im Backup und nicht auf GitHub. Beim Scannen wird das Foto zur Erkennung an Anthropic gesendet; eine Seite kostet in der Regel nur wenige Cent.
+
+Danach: **Vokabeln → Neue Seite hinzufügen → 📷 Foto aufnehmen** (oder „Aus Fotos wählen“, auch mehrere Fotos auf einmal). Nach etwa 10–20 Sekunden erscheint eine Vorschau mit dem Foto zum Vergleichen. Stimmt etwas nicht, im Textfeld korrigieren und „Prüfen“ tippen, sonst „Speichern“.
+Tipp für gute Ergebnisse: nur die Vokabelspalten, gerade von oben, gut beleuchtet.
+
+### Ohne Foto-Scan (von Hand)
+
 1. In der App: **Vokabeln → Neue Seite hinzufügen**.
 2. Foto der Buchseite machen und in Claude (oder ChatGPT/Gemini) hochladen. Dazu den Auftrag schicken, den die App mit einem Tipp auf „Auftrag kopieren“ bereitstellt.
 3. Die Antwort in der App einfügen, „Prüfen“ tippen, Vorschau kontrollieren, „Speichern“.

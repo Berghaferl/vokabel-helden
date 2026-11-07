@@ -1,5 +1,5 @@
 // Einfacher Service Worker: Netzwerk zuerst, bei fehlendem Netz aus dem Cache.
-const CACHE = 'vokabel-helden-v1';
+const CACHE = 'vokabel-helden-v2';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
