@@ -10,6 +10,7 @@ Vorinstalliert ist Seite 190 („Nice to meet you!“, 39 Einträge).
 | `index.html` | die ganze App |
 | `manifest.webmanifest`, `sw.js`, `*.png` | Symbol auf dem Home-Bildschirm und Offline-Betrieb |
 | `seite-190.txt` | Beispiel für das Import-Format |
+| `server/`, `ANLEITUNG-Synology.md` | optional: Sync-Dienst für die Synology (Docker) und Einrichtungs-Anleitung |
 
 ## Veröffentlichen – Variante A: GitHub Pages (am einfachsten)
 
@@ -37,6 +38,7 @@ Vorinstalliert ist Seite 190 („Nice to meet you!“, 39 Einträge).
 - **Suche / Wörterbuch:** Vokabeln → Suchfeld. Durchsucht alle Seiten (Englisch und Deutsch), mit 🔊 zum Anhören und ✏️ zum Korrigieren.
 - **Mehrzahl und Klammern:** „fish, pl fish“ wird als Wort „fish“ gefragt und gesprochen (Mehrzahl nur als Hinweis). Bei „listen (to)“ gelten „listen“ und „listen to“ als richtig. Hinweise wie „(= I am)“ oder „(wörtlich: …)“ müssen nicht gesagt werden.
 - **Startseite:** Seiten mit gleicher Überschrift (oder gleicher „Gruppe“, einstellbar unter Vokabeln → Seite → ✏️) sind zuklappbar zusammengefasst. Pro Seite steht, wie viele Vokabeln neu, am Üben oder fertig sind.
+- **Synchronisieren (optional):** Einstellungen → Synchronisieren gleicht Vokabeln und Lernstand mit einem eigenen Server ab (Anleitung: `ANLEITUNG-Synology.md`). Ohne Server arbeitet die App wie bisher nur auf dem Gerät.
 - **Gezielt aus einem Topf üben:** Meine Töpfe → Topf antippen → 10, 20 oder alle üben.
 
 ## Neue Seiten hinzufügen (Tochter/Frau können das selbst)

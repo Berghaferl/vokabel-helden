@@ -1,0 +1,17 @@
+# Vokabel-Helden Sync-Dienst für die Synology (Container Manager -> Projekt)
+# Ordner auf der Synology, z. B. /docker/vokabel-sync/ mit:  server.js, docker-compose.yml, data/
+services:
+  vokabel-sync:
+    image: node:22-alpine
+    container_name: vokabel-sync
+    restart: unless-stopped
+    command: ["node", "/app/server.js"]
+    ports:
+      - "8787:8080"          # außen 8787 -> im Container 8080
+    environment:
+      TOKEN: "HIER-EIN-LANGES-GEHEIMES-PASSWORT"      # <- ändern! (mind. 8 Zeichen)
+      ALLOW_ORIGIN: "https://berghaferl.github.io"
+      DATA_DIR: /data
+    volumes:
+      - ./server.js:/app/server.js:ro
+      - ./data:/data

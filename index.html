@@ -324,6 +324,10 @@ details.how summary{font-weight:800;cursor:pointer;margin:12px 0 4px;color:var(-
 /* ---------- Konstanten ---------- */
 const MAXPOT = 4;                       // Lern-Töpfe 1..4; die 5. richtige Antwort = Topf 5 = erledigt (Pokal)
 const KEY = 'vokabel-helden.v1';
+const SYNCKEY = 'vokabel-helden.sync';     // Server-Adresse/Passwort: bewusst NICHT in DB (kein Backup, kein Sync)
+const SYNC = {cfg:null, timer:0, busy:false, pending:false, state:'idle', err:'', last:0, lastTry:0, applying:false};
+// Zeitstempel für den Abgleich: w:<Wort> p:<Seite> l:<Wort> (Lernstand) x:<Wort>/xp:<Seite> (gelöscht) sr (Statistik-Reset)
+const stampIn = (db,k) => { (db.ts ||= {})[k] = Date.now(); };
 const DONE = MAXPOT + 1;                // 5 = Pokal-Topf "erledigt"
 const POTCOL = {w:'#FF5D6C', n:'#CFC8F0', 1:'#FF9F43', 2:'#FFD43B', 3:'#9BDB4D', 4:'#2ED3A5', 5:'#FFC83D'};
 const POTKEYS = ['n','w',1,2,3,4,5];
@@ -437,7 +441,7 @@ const DEF = {scanModel:'claude-sonnet-5-5', reward:'mix', cheer:true, theme:'mix
 let DB = loadDB();
 
 function seedDB(){
-  const db={pages:[], prog:{}, settings:{...DEF}, stats:{days:[], right:0, wrong:0, sessions:0, today:{d:'',n:0}}};
+  const db={pages:[], prog:{}, ts:{}, settings:{...DEF}, stats:{days:[], right:0, wrong:0, sessions:0, today:{d:'',n:0}}};
   const parsed=parseVocabText(SEED);
   parsed.pages.forEach(p=>mergePage(db,p,true));
   db.settings.selected=db.pages.map(p=>p.id);
@@ -447,7 +451,7 @@ function loadDB(){
   try{
     const j=JSON.parse(localStorage.getItem(KEY));
     if(j && Array.isArray(j.pages)){
-      j.prog=j.prog||{}; j.settings={...DEF,...(j.settings||{})};
+      j.prog=j.prog||{}; j.ts=j.ts||{}; j.settings={...DEF,...(j.settings||{})};
       j.stats=Object.assign({days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}}, j.stats||{});
       return j;
     }
@@ -458,6 +462,7 @@ let saveFailed=false;
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(DB)); }
   catch(e){ if(!saveFailed){ saveFailed=true; toast('Speichern nicht möglich – bitte Backup erstellen!'); } }
+  if(SYNC.cfg && !SYNC.applying) scheduleSync(20000);
 }
 function mergePage(db, p, silent){
   const num = Number(p.page)||0;
@@ -465,7 +470,7 @@ function mergePage(db, p, silent){
   let page = db.pages.find(x=>x.id===id);
   if(!page){ page={id, page:num, title:p.title||'', words:[]}; db.pages.push(page); }
   else if(p.title) page.title=p.title;
-  const seen={};
+  const seen={}, oldIds=(page.words||[]).map(w=>w.id);
   page.words = p.words.map(w=>{
     let base=id+':'+slug(w.en), wid=base, k=2;
     while(seen[wid]) wid=base+'#'+(k++);
@@ -475,12 +480,13 @@ function mergePage(db, p, silent){
     return o;
   });
   db.pages.sort((a,b)=>a.page-b.page);
+  if(!silent){ stampIn(db,'p:'+id); page.words.forEach(w=>stampIn(db,'w:'+w.id)); oldIds.filter(i=>!seen[i]).forEach(i=>stampIn(db,'x:'+i)); }
   return page;
 }
 const allWords = () => DB.pages.flatMap(p=>p.words.map(w=>({...w, pageId:p.id})));
 const getPage = id => DB.pages.find(p=>p.id===id);
 function getLvl(id, d){ const p=DB.prog[id]; return p && p[d]!=null ? p[d] : 0; }
-function setLvl(id, d, l){ (DB.prog[id] ||= {})[d]=l; }
+function setLvl(id, d, l){ (DB.prog[id] ||= {})[d]=l; stampIn(DB,'l:'+id); }
 const lvlKey = l => l===-1 ? 'w' : l===0 ? 'n' : l;
 
 /* ---------- Topf-Logik ---------- */
@@ -1106,7 +1112,7 @@ function viewLearn(){
   }).join('');
   return `
   <div class="hero"><div class="owl">🦉</div><div class="bubble">${hello}</div></div>
-  <div class="chips"><span class="chip-s">🔥 ${sk} ${sk===1?'Tag':'Tage'} in Folge</span><span class="chip-s">✅ Heute: ${DB.stats.today.d===todayStr()?DB.stats.today.n:0} beantwortet</span></div>
+  <div class="chips"><span class="chip-s">🔥 ${sk} ${sk===1?'Tag':'Tage'} in Folge</span><span class="chip-s">✅ Heute: ${DB.stats.today.d===todayStr()?DB.stats.today.n:0} beantwortet</span>${syncChipHTML()}</div>
   <div class="rowtools"><h2>Welche Seiten?</h2>
     <div><button class="link" data-act="selAll">Alle</button><button class="link" data-act="selNone">Keine</button></div></div>
   <p class="legend"><span class="dot" style="background:#CFC8F0"></span><b>neu</b> = noch nie gefragt &nbsp; <span class="dot" style="background:#FFB454"></span><b>am Üben</b> = liegt in einem Topf &nbsp; <span class="dot" style="background:#2ED3A5"></span><b>fertig</b> = 5× richtig (Zahlen für die gewählte Richtung)</p>
@@ -1233,8 +1239,9 @@ function viewSettings(){
   <div class="panel"><h3>🎤 Einsprechen – Hinweise</h3>
     <p class="small" style="margin:0">${SR?'Spracherkennung ist in diesem Browser vorhanden.':'<b style="color:var(--bad-d)">Spracherkennung ist in diesem Browser nicht verfügbar.</b> Nutze „Schreiben“ oder „Aufdecken“.'}</p>
     <p class="small muted" style="margin:8px 0 0">Auf iPad/iPhone: Die App im <b>Safari</b> öffnen und das Mikrofon erlauben. In den iOS-Einstellungen muss <b>Diktierfunktion</b> aktiviert sein (Einstellungen → Allgemein → Tastatur). Die Erkennung läuft über Apple-Server und braucht Internet.</p></div>
+  ${syncPanelHTML()}
   <div class="panel"><h3>💾 Wo liegen meine Daten?</h3>
-    <p class="small" style="margin:0 0 8px">Alle Vokabeln und der Lernstand liegen <b>nur auf diesem Gerät</b>, im Browser. Jedes Gerät (iPad, PC, Handy) hat seine eigenen Daten, und auch Safari und das Home-Bildschirm-Symbol sind getrennt. Ein anderes Gerät fängt bei null an – auch der API-Schlüssel muss dort neu eingetragen werden. Zum Umziehen: Vokabeln → Sicherung speichern, auf dem anderen Gerät laden.</p>
+    <p class="small" style="margin:0 0 8px">Alle Vokabeln und der Lernstand liegen <b>nur auf diesem Gerät</b>, im Browser. Jedes Gerät (iPad, PC, Handy) hat seine eigenen Daten, und auch Safari und das Home-Bildschirm-Symbol sind getrennt. Ein anderes Gerät fängt bei null an (außer du nutzt oben „Synchronisieren“) – der API-Schlüssel muss dort immer neu eingetragen werden. Zum Umziehen: Vokabeln → Sicherung speichern, auf dem anderen Gerät laden.</p>
     <p class="small muted" id="storeInfo" style="margin:0"></p></div>
   <div class="panel"><h3>Fortschritt</h3>
     <button class="btn bad" data-act="resetProgress">🔄 Lernstand zurücksetzen</button>
@@ -1497,7 +1504,7 @@ function overrideCorrect(){
   const it=S.last.it, w=it.w;
   // letzten Eintrag rückgängig machen und als richtig werten
   const res=S.results.pop();
-  const pr=DB.prog[w.id]; if(pr&&pr.w) pr.w--;
+  const pr=DB.prog[w.id]; if(pr&&pr.w) pr.w--; stampIn(DB,'l:'+w.id);
   DB.stats.wrong=Math.max(0,DB.stats.wrong-1);
   const retryIdx=S.queue.findIndex((q,i)=>i>S.i && q.retried && q.w.id===w.id && q.d===it.d);
   if(retryIdx>=0) S.queue.splice(retryIdx,1);
@@ -1515,7 +1522,7 @@ function nextCard(){
 /* ----- Ende ----- */
 function finishSession(){
   stopSpeaking(); stopListening(true);
-  UI.screen='summary'; render();
+  UI.screen='summary'; render(); scheduleSync(600);
 }
 function renderSummary(){
   if(!S){ UI.screen=null; return render(); }
@@ -1772,7 +1779,7 @@ const A={
   closeSheet:()=>closeSheet(),
   toggle:t=>{ const k=t.dataset.k; DB.settings[k]=!DB.settings[k]; save(); render(); },
   testVoice:t=>{ unlockAudio(); say(t.dataset.l==='en'?'Hello! Nice to meet you!':'Hallo! Schön, dich zu sehen!', t.dataset.l); },
-  resetProgress:async()=>{ if(await askConfirm('Wirklich den ganzen Lernstand zurücksetzen?','Ja, zurücksetzen',true)){ DB.prog={}; DB.stats={days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}}; save(); toast('Lernstand zurückgesetzt'); render(); } },
+  resetProgress:async()=>{ if(await askConfirm('Wirklich den ganzen Lernstand zurücksetzen?','Ja, zurücksetzen',true)){ DB.prog={}; DB.stats={days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}}; DB.pages.forEach(p=>p.words.forEach(w=>stampIn(DB,'l:'+w.id))); stampIn(DB,'sr'); save(); toast('Lernstand zurückgesetzt'); render(); } },
   say:t=>{ unlockAudio(); const it=S&&curItem(); if(it) sayWord(it.w,t.dataset.k); },
   mic:()=>startListening(),
   giveup:()=>{ if(S&&S.ph==='ask') finishCard(false); },
@@ -1789,6 +1796,19 @@ const A={
   next:()=>nextCard(),
   quit:async()=>{ if(await askConfirm('Übung beenden? Dein Fortschritt bleibt gespeichert.','Beenden')){ stopSpeaking(); stopListening(true); S=null; UI.screen=null; render(); } },
   again:()=>{ if(S&&S.restart) S.restart(); else startSession(); },
+  syncNow:()=>syncNow(true),
+  syncOff:async()=>{ if(await askConfirm('Verbindung trennen? Die Daten bleiben auf diesem Gerät und auf dem Server erhalten.','Trennen',true)){ clearTimeout(SYNC.timer); SYNC.cfg=null; SYNC.last=0; syncSaveCfg(); UI.syErr=''; render(); } },
+  syncConnect:async()=>{
+    let url=($('#syUrl').value||'').trim().replace(/\/+$/,''), tok=($('#syTok').value||'').trim(), prof=($('#syProf').value||'').trim().toLowerCase().slice(0,30)||'edda';
+    if(!url||!tok){ UI.syErr='Bitte Adresse und Passwort eintragen.'; syncStatusUpdate(); return; }
+    if(!/^https?:\/\//i.test(url)) url='https://'+url;
+    if(location.protocol==='https:' && /^http:/i.test(url)){ UI.syErr='Die Adresse muss mit https:// beginnen.'; syncStatusUpdate(); return; }
+    UI.syErr='⏳ Verbinde …'; syncStatusUpdate();
+    SYNC.cfg={url,token:tok,profile:prof,last:0}; SYNC.last=0; SYNC.state='idle';
+    const r=await syncNow(true);
+    if(r.ok){ UI.syErr=''; syncSaveCfg(); render(); }
+    else{ SYNC.cfg=null; syncSaveCfg(); UI.syErr='⚠ '+r.err; syncStatusUpdate(); }
+  },
   startPot:t=>startFromPot(t.dataset.d, t.dataset.k, t.dataset.n),
   sheetMode:t=>{ DB.settings.mode=t.dataset.v; save(); potSheet(t.dataset.d, t.dataset.k); },
   testReward:()=>{ unlockAudio(); reward(1.6); cheer(pick(PRAISE)); SND.ok(2); },
@@ -1818,7 +1838,7 @@ const A={
   savePageMeta:()=>{ const p=getPage(editPageId); const n=+($('#epPage').value)||p.page; const t=$('#epTitle').value.trim();
     if(n!==p.page && DB.pages.some(x=>x!==p&&x.page===n)){ toast('Diese Seitenzahl gibt es schon.'); return; }
     const gr=($('#epGroup')||{}).value; if(gr!=null){ gr.trim()?p.group=gr.trim():delete p.group; }
-    p.page=n; p.title=t; DB.pages.sort((a,b)=>a.page-b.page); save(); toast('Gespeichert'); renderEditPage(); },
+    p.page=n; p.title=t; stampIn(DB,'p:'+p.id); DB.pages.sort((a,b)=>a.page-b.page); save(); toast('Gespeichert'); renderEditPage(); },
   editWord:t=>wordForm(getPage(editPageId).words.find(w=>w.id===t.dataset.id),'page'),
   addWord:()=>wordForm(null,'page'),
   saveWord:t=>{
@@ -1829,9 +1849,10 @@ const A={
     let w=found && found.w;
     if(w){ w.en=en; w.ipa=ipa; w.de=de; ok.length?w.deOk=ok:delete w.deOk; }
     else{ let id=p.id+':'+slug(en), k=2; while(p.words.some(x=>x.id===id)) id=p.id+':'+slug(en)+'#'+(k++); w={id,en,ipa,de}; if(ok.length) w.deOk=ok; p.words.push(w); }
+    stampIn(DB,'w:'+w.id);
     save(); closeSheet(); afterWordSave();
   },
-  delWord:async t=>{ const f=findWord(t.dataset.id); if(f && await askConfirm('Diese Vokabel löschen?','Löschen',true)){ f.p.words=f.p.words.filter(w=>w.id!==t.dataset.id); delete DB.prog[t.dataset.id]; save(); closeSheet(); afterWordSave(); } },
+  delWord:async t=>{ const f=findWord(t.dataset.id); if(f && await askConfirm('Diese Vokabel löschen?','Löschen',true)){ f.p.words=f.p.words.filter(w=>w.id!==t.dataset.id); delete DB.prog[t.dataset.id]; stampIn(DB,'x:'+t.dataset.id); save(); closeSheet(); afterWordSave(); } },
   editCur:()=>{ if(!S) return; const it=curItem(); const f=it&&findWord(it.w.id); if(!f) return; stopListening(true); const m=$('#micbtn'); if(m) m.classList.remove('live'); wordForm(f.w,'quiz'); },
   editFound:t=>{ const f=findWord(t.dataset.id); if(f) wordForm(f.w,'search'); },
   sayRow:t=>{ unlockAudio(); const f=findWord(t.dataset.id); if(f) say(speakText(f.w,'en'),'en',DB.settings.rate); },
@@ -1839,7 +1860,7 @@ const A={
   selGroup:t=>{ const g=pageGroups().find(x=>x.key===t.dataset.key); if(!g) return; const ids=g.pages.map(p=>p.id), sel=DB.settings.selected, all=ids.every(i=>sel.includes(i));
     DB.settings.selected = all ? sel.filter(i=>!ids.includes(i)) : [...new Set([...sel,...ids])]; save(); render(); },
   deletePage:async()=>{ const p=getPage(editPageId); if(await askConfirm(`Seite ${p.page} mit ${p.words.length} Vokabeln wirklich löschen?`,'Löschen',true)){
-      p.words.forEach(w=>delete DB.prog[w.id]); DB.pages=DB.pages.filter(x=>x!==p); DB.settings.selected=DB.settings.selected.filter(i=>i!==p.id); save(); UI.screen=null; UI.tab='words'; render(); } },
+      p.words.forEach(w=>{ delete DB.prog[w.id]; stampIn(DB,'x:'+w.id); }); stampIn(DB,'xp:'+p.id); DB.pages=DB.pages.filter(x=>x!==p); DB.settings.selected=DB.settings.selected.filter(i=>i!==p.id); save(); UI.screen=null; UI.tab='words'; render(); } },
   exportBackup:async()=>{
     let withKey=false;
     if(getKey()) withKey=await askConfirm('Soll der API-Schlüssel mit in die Sicherung? Praktisch für dein eigenes zweites Gerät – die Datei dann nicht weitergeben.','Ja, mitnehmen',false,'Nein, ohne');
@@ -1861,7 +1882,7 @@ document.addEventListener('change',async e=>{
       if(!j||!Array.isArray(j.pages)) throw new Error('format');
       if(await askConfirm('Sicherung laden? Die aktuellen Daten auf diesem Gerät werden ersetzt.','Laden',true)){
         const kk=j._apiKey; delete j._apiKey; if(kk) setKey(kk);
-        DB=j; DB.prog=DB.prog||{}; DB.settings={...DEF,...(DB.settings||{})}; DB.stats=Object.assign({days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}},DB.stats||{});
+        DB=j; DB.prog=DB.prog||{}; DB.ts=DB.ts||{}; DB.settings={...DEF,...(DB.settings||{})}; DB.stats=Object.assign({days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}},DB.stats||{});
         save(); toast('Sicherung geladen ✔'); render();
       }
     }catch(err){ toast('Diese Datei ist keine gültige Sicherung.'); }
@@ -1876,15 +1897,185 @@ document.addEventListener('input',e=>{
   if(t.dataset && t.dataset.text){ DB.settings[t.dataset.text]=t.value; save(); }
 });
 
+/* ---------- Synchronisieren mit dem eigenen Server (z. B. Synology) ----------
+   Offline zuerst: Die App arbeitet immer mit dem lokalen Speicher. Beim Abgleich wird der Stand vom Server
+   geholt, mit dem lokalen zusammengeführt (pro Vokabel / Seite gewinnt die jüngere Änderung, Löschungen
+   zählen mit) und zurückgeschrieben. Der Server prüft nur die Versionsnummer (If-Match). */
+const syncClone = o => o==null ? o : JSON.parse(JSON.stringify(o));
+const syncCanon = o => JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x],a),{}):v);
+function syncMerge(L,R){
+  const lt=L.ts||{}, rt=R.ts||{}, T=(m,k)=>m[k]||0;
+  const out={pages:[],prog:{},ts:{},stats:null};
+  const setT=(k,v)=>{ if(v>0) out.ts[k]=v; };
+  const idx=pages=>{ const m={}; (pages||[]).forEach(p=>(p.words||[]).forEach(w=>{ m[w.id]={w,pid:p.id}; })); return m; };
+  // Vokabeln
+  const wl=idx(L.pages), wr=idx(R.pages), keep={};
+  new Set([...Object.keys(wl),...Object.keys(wr)]).forEach(id=>{
+    const a=wl[id], b=wr[id], ta=a?T(lt,'w:'+id):-1, tb=b?T(rt,'w:'+id):-1;
+    const dead=Math.max(T(lt,'x:'+id),T(rt,'x:'+id));
+    if(dead>0 && dead>=Math.max(ta,tb)) return;               // gelöscht (und danach nicht neu bearbeitet)
+    keep[id]= ta>tb ? a : tb>ta ? b : (b||a);                  // Gleichstand: Stand vom Server
+    setT('w:'+id,Math.max(ta,tb));
+  });
+  // Seiten
+  const pl={}, pr={}, order={};
+  (L.pages||[]).forEach(p=>pl[p.id]=p); (R.pages||[]).forEach(p=>pr[p.id]=p);
+  new Set([...Object.keys(pl),...Object.keys(pr)]).forEach(id=>{
+    const a=pl[id], b=pr[id], ta=a?T(lt,'p:'+id):-1, tb=b?T(rt,'p:'+id):-1;
+    const dead=Math.max(T(lt,'xp:'+id),T(rt,'xp:'+id));
+    if(dead>0 && dead>=Math.max(ta,tb)) return;
+    const win= ta>tb ? a : tb>ta ? b : (b||a);
+    const pg={id,page:win.page,title:win.title||'',words:[]}; if(win.group) pg.group=win.group;
+    out.pages.push(pg); order[id]=(win.words||[]).map(w=>w.id); setT('p:'+id,Math.max(ta,tb));
+  });
+  out.pages.sort((x,y)=>(x.page-y.page)||(x.id<y.id?-1:1));
+  const byId={}; out.pages.forEach(p=>byId[p.id]=p);
+  const placed={};
+  out.pages.forEach(p=>order[p.id].forEach(id=>{ const k=keep[id]; if(k && k.pid===p.id && !placed[id]){ p.words.push(syncClone(k.w)); placed[id]=1; } }));
+  Object.keys(keep).forEach(id=>{ if(placed[id]) return; const k=keep[id], p=byId[k.pid]; if(p){ p.words.push(syncClone(k.w)); placed[id]=1; } });
+  // Löschmarken weitergeben
+  [lt,rt].forEach(m=>Object.keys(m).forEach(k=>{ if(k[0]==='x') setT(k,Math.max(T(lt,k),T(rt,k))); }));
+  // Lernstand pro Vokabel
+  const lp=L.prog||{}, rp=R.prog||{};
+  Object.keys(placed).forEach(id=>{
+    const a=lp[id], b=rp[id], ta=T(lt,'l:'+id), tb=T(rt,'l:'+id);
+    let win;
+    if(ta>tb) win=a; else if(tb>ta) win=b;
+    else{ const na=a?(a.r||0)+(a.w||0):-1, nb=b?(b.r||0)+(b.w||0):-1; win = na>nb ? a : (b!==undefined ? b : a); }
+    if(win) out.prog[id]=syncClone(win);
+    setT('l:'+id,Math.max(ta,tb));
+  });
+  // Statistik
+  const ls=L.stats||{}, rs=R.stats||{}, sra=T(lt,'sr'), srb=T(rt,'sr');
+  if(sra!==srb) out.stats=syncClone(sra>srb?ls:rs);
+  else{
+    const a0=ls.today||{d:'',n:0}, b0=rs.today||{d:'',n:0};
+    out.stats={days:[...new Set([...(ls.days||[]),...(rs.days||[])])].sort(), right:Math.max(ls.right||0,rs.right||0), wrong:Math.max(ls.wrong||0,rs.wrong||0), sessions:Math.max(ls.sessions||0,rs.sessions||0),
+      today: a0.d>b0.d ? syncClone(a0) : b0.d>a0.d ? syncClone(b0) : {d:a0.d,n:Math.max(a0.n||0,b0.n||0)}};
+  }
+  setT('sr',Math.max(sra,srb));
+  return out;
+}
+function syncRemoteView(doc,profile){
+  const d=doc||{}, pf=(d.profiles&&d.profiles[profile])||{};
+  return {pages:d.pages||[], ts:{...(d.ts||{}),...(pf.ts||{})}, prog:pf.prog||{}, stats:pf.stats||null};
+}
+function syncBuildDoc(m,profile,remoteDoc){
+  const shared={}, prof={};
+  Object.keys(m.ts).forEach(k=>{ (k[0]==='l'||k==='sr' ? prof : shared)[k]=m.ts[k]; });
+  const doc={v:1, pages:m.pages, ts:shared, profiles:{...((remoteDoc&&remoteDoc.profiles)||{})}};
+  doc.profiles[profile]={prog:m.prog, ts:prof, stats:m.stats};
+  return doc;
+}
+function syncApply(m){
+  SYNC.applying=true;
+  DB.pages=m.pages; DB.prog=m.prog; DB.ts=m.ts;
+  DB.stats=Object.assign({days:[],right:0,wrong:0,sessions:0,today:{d:'',n:0}},m.stats||{});
+  const ids=new Set(DB.pages.map(p=>p.id)); DB.settings.selected=(DB.settings.selected||[]).filter(i=>ids.has(i));
+  save(); SYNC.applying=false;
+}
+function syncLoadCfg(){
+  try{ const c=JSON.parse(localStorage.getItem(SYNCKEY)||'null'); if(c && c.url && c.token){ SYNC.cfg=c; SYNC.last=c.last||0; } }catch(e){}
+}
+function syncSaveCfg(){ try{ SYNC.cfg ? localStorage.setItem(SYNCKEY,JSON.stringify(SYNC.cfg)) : localStorage.removeItem(SYNCKEY); }catch(e){} }
+function scheduleSync(ms){
+  if(!SYNC.cfg) return;
+  clearTimeout(SYNC.timer); SYNC.timer=setTimeout(()=>syncNow(false),ms);
+}
+async function syncReq(method,rev,doc){
+  const c=SYNC.cfg, ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),15000);
+  try{
+    const headers={'Authorization':'Bearer '+c.token};
+    if(method==='PUT'){ headers['Content-Type']='application/json'; headers['If-Match']=String(rev); }
+    const r=await fetch(c.url+'/api/doc',{method,headers,body:method==='PUT'?JSON.stringify(doc):undefined,signal:ctl.signal,cache:'no-store'});
+    let j=null; try{ j=await r.json(); }catch(e){}
+    return {status:r.status, json:j};
+  }catch(e){
+    const err=new Error(e.name==='AbortError' ? 'Server antwortet nicht.' : 'Server nicht erreichbar.'); err.soft=true; throw err;
+  }finally{ clearTimeout(to); }
+}
+async function syncNow(manual){
+  const c=SYNC.cfg; if(!c) return {ok:false,err:'nicht verbunden'};
+  if(SYNC.busy){ SYNC.pending=true; return {ok:false,err:'läuft schon'}; }
+  if(UI.screen==='quiz'){ if(!manual) scheduleSync(30000); return {ok:false,err:'Quiz läuft'}; }
+  SYNC.busy=true; SYNC.state='sync'; SYNC.lastTry=Date.now(); syncStatusUpdate();
+  const before=syncCanon([DB.pages,DB.prog,DB.stats]);
+  try{
+    try{ localStorage.setItem('vokabel-helden.presync',JSON.stringify(DB)); }catch(e){}   // Sicherheitskopie des Stands vor dem Abgleich
+    const get=await syncReq('GET');
+    if(get.status===401) throw Object.assign(new Error('Passwort stimmt nicht.'),{auth:true});
+    if(get.status===429) throw new Error('Zu viele Fehlversuche – bitte später nochmal.');
+    if(get.status!==200||!get.json) throw new Error('Das ist nicht der Sync-Dienst (Antwort '+get.status+').');
+    let remote={rev:get.json.rev, doc:get.json.doc}, done=false;
+    for(let i=0;i<5 && !done;i++){
+      const m=syncMerge({pages:DB.pages,prog:DB.prog,ts:DB.ts||{},stats:DB.stats}, syncRemoteView(remote.doc,c.profile));
+      const doc=syncBuildDoc(m,c.profile,remote.doc);
+      syncApply(m);
+      if(syncCanon(doc)===syncCanon(remote.doc||{})){ done=true; break; }
+      const put=await syncReq('PUT',remote.rev,doc);
+      if(put.status===200){ done=true; break; }
+      if(put.status===409 && put.json){ remote={rev:put.json.rev, doc:put.json.doc}; continue; }
+      if(put.status===401) throw Object.assign(new Error('Passwort stimmt nicht.'),{auth:true});
+      throw new Error('Serverfehler ('+put.status+').');
+    }
+    if(!done) throw new Error('Abgleich war nicht möglich (zu viele gleichzeitige Änderungen). Gleich nochmal.');
+    SYNC.state='idle'; SYNC.err=''; SYNC.last=Date.now(); c.last=SYNC.last; syncSaveCfg();
+    const changed=before!==syncCanon([DB.pages,DB.prog,DB.stats]);
+    SYNC.busy=false; syncStatusUpdate();
+    if(changed && !UI.screen && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'') && !$('#overlay')) render();
+    if(manual) toast(changed?'Abgeglichen – neue Daten übernommen ✔':'Abgeglichen ✔');
+    if(SYNC.pending){ SYNC.pending=false; scheduleSync(1500); }
+    return {ok:true,changed};
+  }catch(e){
+    SYNC.busy=false; SYNC.state='error'; SYNC.err=e.message||'Abgleich fehlgeschlagen.'; syncStatusUpdate();
+    if(manual) toast('⚠ '+SYNC.err);
+    return {ok:false,err:SYNC.err,auth:!!e.auth};
+  }
+}
+function syncFmt(t){ const d=new Date(t); return (todayStr(d)===todayStr()?'heute':d.toLocaleDateString('de-DE'))+', '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
+function syncStateText(){
+  if(!SYNC.cfg) return UI.syErr||'';
+  if(SYNC.state==='sync') return '⏳ Gleiche ab …';
+  if(SYNC.state==='error') return '⚠ '+SYNC.err+(SYNC.last?' (zuletzt geklappt: '+syncFmt(SYNC.last)+')':'');
+  return SYNC.last ? '✔ Zuletzt abgeglichen: '+syncFmt(SYNC.last) : 'Noch nicht abgeglichen.';
+}
+function syncChipHTML(){
+  if(!SYNC.cfg) return '';
+  const t = SYNC.state==='error' ? '☁️ offline' : (SYNC.state==='sync'||!SYNC.last) ? '☁️ …' : '☁️ abgeglichen';
+  return `<span class="chip-s" id="syncChip">${t}</span>`;
+}
+function syncStatusUpdate(){
+  const a=$('#syncState'); if(a) a.textContent=syncStateText();
+  const c=$('#syncChip'); if(c) c.outerHTML=syncChipHTML();
+}
+function syncPanelHTML(){
+  const c=SYNC.cfg, st=DB.settings;
+  if(c) return `<div class="panel"><h3>🔄 Synchronisieren</h3>
+    <p class="small" style="margin:0 0 6px">Verbunden mit <b>${esc(c.url)}</b><br>Profil: <b>${esc(c.profile)}</b> (Vokabeln gemeinsam, Lernstand pro Profil)</p>
+    <p class="small" id="syncState" style="margin:0 0 10px;font-weight:800">${esc(syncStateText())}</p>
+    <div class="btns"><button class="btn" data-act="syncNow">Jetzt abgleichen</button><button class="btn ghost" data-act="syncOff">Trennen</button></div></div>`;
+  return `<div class="panel"><h3>🔄 Synchronisieren</h3>
+    <p class="small" style="margin:0 0 10px">Optional: Vokabeln und Lernstand auf einem eigenen Server (z. B. Synology) ablegen, damit mehrere Geräte denselben Stand haben. Der Server muss vorher eingerichtet sein (Anleitung im Projekt: ANLEITUNG-Synology.md).</p>
+    <label class="field"><span>Server-Adresse</span><input id="syUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://vokabel.deinedomain.de"></label>
+    <label class="field"><span>Passwort</span><input id="syTok" type="password" autocomplete="off"></label>
+    <label class="field"><span>Profil (wer übt?)</span><input id="syProf" type="text" autocomplete="off" value="${esc(st.name||'Edda')}"></label>
+    <button class="btn" data-act="syncConnect">Verbinden</button>
+    <p class="small" id="syncState" style="margin:10px 0 0;font-weight:800">${esc(UI.syErr||'')}</p></div>`;
+}
+
 /* ---------- Start ---------- */
 try{
   if(navigator.storage && navigator.storage.persist) navigator.storage.persist();
   if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(()=>{});
 }catch(e){}
+syncLoadCfg();
 render();
+if(SYNC.cfg) setTimeout(()=>syncNow(false),1200);
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && SYNC.cfg && Date.now()-SYNC.lastTry>60000) syncNow(false); });
+window.addEventListener('online',()=>scheduleSync(1000));
 
 // Für Tests
-window.__app={splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
+window.__app={save,mergePage,syncMerge,syncRemoteView,syncBuildDoc,syncCanon,syncNow,get SYNC(){return SYNC},stampIn,splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
 </script>
 </body>
 </html>

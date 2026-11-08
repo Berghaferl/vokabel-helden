@@ -1,5 +1,5 @@
 // Einfacher Service Worker: Netzwerk zuerst, bei fehlendem Netz aus dem Cache.
-const CACHE = 'vokabel-helden-v4';
+const CACHE = 'vokabel-helden-v5';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -16,6 +16,8 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Nur eigene Dateien der App: Anfragen an andere Server (Sync, Claude-API) nie abfangen oder zwischenspeichern
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request)
       .then((res) => {
