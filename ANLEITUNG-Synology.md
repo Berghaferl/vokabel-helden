@@ -29,6 +29,18 @@ Falls die DSM-Firewall aktiv ist: Port 8787 (oder später 443) für das lokale N
 2. **Fritz!Box:** Sie blockiert solche Einträge oft („DNS-Rebind-Schutz“). Dann unter *Heimnetz → Netzwerk → Netzwerkeinstellungen → Weitere Einstellungen → DNS-Rebind-Schutz* die Domain `deinedomain.de` als Ausnahme eintragen.
 3. Dem Synology feste IP im Router geben (DHCP-Reservierung), damit der Eintrag stimmt.
 
+## 2b. Domain bei Hosteurope: DNS zu Cloudflare umziehen (einmalig)
+
+Hosteurope bietet keine offizielle DNS-Schnittstelle an, über die ein Zertifikat automatisch bestätigt werden könnte. Wenn die Domain sonst nicht genutzt wird (keine Webseite, keine E-Mail), ist der einfachste Weg, **nur die Namensverwaltung** zu Cloudflare (kostenlos) zu verlegen. Die Domain bleibt bei Hosteurope registriert und wird dort weiter bezahlt.
+
+1. Konto bei Cloudflare anlegen → **Domain hinzufügen** → Tarif **Free**. Cloudflare zeigt zwei Nameserver an (z. B. `xxx.ns.cloudflare.com`). Vorhandene Einträge prüfen und übernehmen, falls doch etwas daran hängt (E-Mail, Webseite).
+2. Bei Hosteurope im KIS die Nameserver ändern: *Produktverwaltung → Domainservices → Administration → Nameserver / DNS-Einträge bearbeiten*, dort die Domain-Aktualisierung mit eigenen Nameservern wählen und die zwei Cloudflare-Nameserver eintragen. Danach kommt eine Bestätigungs-E-Mail von Hosteurope, deren Link du anklicken musst. Das gilt dort als Experteneinstellung. Die Bildschirme können bei dir etwas anders aussehen, im Zweifel hilft der Hosteurope-Support.
+3. Warten (meist Stunden, bis zu 48 Stunden), bis Cloudflare die Domain als **„Aktiv“** anzeigt.
+4. In Cloudflare unter **DNS → Einträge** den A-Eintrag anlegen: Name `vokabel`, IPv4 = interne IP der Synology (z. B. `192.168.178.20`), **Proxy-Status auf „Nur DNS“ (graue Wolke)**.
+5. **API-Token** erzeugen: *Mein Profil → API-Tokens → Token erstellen → Vorlage „Zone-DNS bearbeiten“*, auf deine Domain beschränken. Das Token (lange Zeichenfolge) brauchst du im nächsten Schritt und niemandem sonst zeigen.
+
+Statt des Umzugs geht auch ein Weg ohne Nameserver-Wechsel (CNAME auf einen „acme-dns“-Dienst, den Hosteurope unterstützt). Er ist aber technischer und ich würde ihn nur nehmen, wenn die Domain doch anderweitig genutzt wird.
+
 ## 3. HTTPS-Zertifikat (Let's Encrypt per DNS-Bestätigung)
 
 Weil die Synology nicht aus dem Internet erreichbar sein soll, bestätigt Let's Encrypt die Domain über einen DNS-Eintrag. Dafür brauchst du einen DNS-Anbieter, der eine API bietet (z. B. Cloudflare, Hetzner, IONOS, Strato eingeschränkt, ...). Sag mir, wo deine Domain liegt, dann schreibe ich dir die passenden Zeilen.
