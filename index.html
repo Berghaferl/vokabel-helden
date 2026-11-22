@@ -190,8 +190,14 @@ nav.tabs button.on{background:#F1ECFF;color:var(--primary-d)}
 }
 .wform input:focus{border-color:var(--primary)}
 .wform input::placeholder{font-size:17px;font-weight:600;color:#A79FCB}
-.pattern{font-size:26px;letter-spacing:5px;font-weight:800;color:var(--primary-d);margin-bottom:8px}
+.pattern{font-size:26px;letter-spacing:5px;font-weight:800;color:var(--primary-d);margin-bottom:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.pattern:empty{display:none}
 .skip{display:block;margin:10px auto 0}
+.hintrow{display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:12px}
+.hintrow .btn{min-height:50px;font-size:17px;padding:0 20px}
+.hintrow .skip{margin:2px auto 0}
+.ex{font-size:18px;font-weight:700;color:var(--ink);margin-top:8px;line-height:1.35}
+.exrow{font-size:14px;color:var(--muted);font-weight:600;margin-top:2px}
 .fb{margin-top:14px;border-radius:24px;padding:14px 16px;text-align:center;border:3px solid}
 .fb.ok{background:#E6FAF2;border-color:var(--good)}
 .fb.bad{background:#FFEEF0;border-color:var(--bad)}
@@ -437,7 +443,7 @@ function parseVocabText(text, defPage, defTitle){
 }
 
 /* ---------- Daten ---------- */
-const DEF = {scanModel:'claude-sonnet-5-5', reward:'mix', cheer:true, theme:'mix', sound:true, speakQ:true, speakA:true, rate:0.9, enVoice:'', deVoice:'', size:10, dir:'mix', mode:'speak', selected:[], name:''};
+const DEF = {scanModel:'claude-sonnet-5-5', reward:'mix', cheer:true, theme:'mix', sound:true, speakQ:true, speakA:true, speakEx:true, autoEx:true, rate:0.9, enVoice:'', deVoice:'', size:10, dir:'mix', mode:'speak', selected:[], name:''};
 let DB = loadDB();
 
 function seedDB(){
@@ -470,13 +476,14 @@ function mergePage(db, p, silent){
   let page = db.pages.find(x=>x.id===id);
   if(!page){ page={id, page:num, title:p.title||'', words:[]}; db.pages.push(page); }
   else if(p.title) page.title=p.title;
-  const seen={}, oldIds=(page.words||[]).map(w=>w.id);
+  const seen={}, oldWords=page.words||[], oldIds=oldWords.map(w=>w.id);
   page.words = p.words.map(w=>{
     let base=id+':'+slug(w.en), wid=base, k=2;
     while(seen[wid]) wid=base+'#'+(k++);
     seen[wid]=1;
     const o={id:wid, en:w.en, ipa:w.ipa||'', de:w.de};
     if(w.deOk && w.deOk.length) o.deOk=w.deOk;
+    const old=oldWords.find(x=>x.id===wid); if(old && old.ex) o.ex=old.ex; else if(w.ex) o.ex=w.ex;
     return o;
   });
   db.pages.sort((a,b)=>a.page-b.page);
@@ -570,6 +577,26 @@ const enDisp=w=>splitPl(w.en).head;
 const enPl=w=>splitPl(w.en).pl;
 const enListTxt=w=>enDisp(w)+(enPl(w)?' · Mehrzahl: '+enPl(w):'');
 const plNoteHTML=w=>enPl(w)?` <span class="plnote">Mehrzahl: ${esc(enPl(w))}</span>`:'';
+
+/* ---------- Beispielsätze ----------
+   Pro Vokabel optional w.ex (ein ganz einfacher englischer Satz). Für die mitgelieferte Seite 190 gibt es fertige Sätze;
+   für alle anderen erzeugt Claude sie (mit dem Schlüssel der Eltern) oder man trägt sie von Hand ein. */
+const EX_SEED = {
+  'nice to meet you':'Hi, I\'m Tom. Nice to meet you.', 'nice':'The cat is nice.', 'meet':'I meet my friend.', 'you':'I can see you.',
+  'hi':'Hi, Tom!', 'i\'m':'I\'m ten years old.', 'the crab':'The crab is red.', 'what\'s your name':'Hello! What\'s your name?',
+  'what':'What is this?', 'your':'This is your bag.', 'name':'My name is Anna.',
+  'one':'I have one cat.', 'two':'I have two dogs.', 'three':'I see three birds.', 'four':'We are four.', 'five':'She has five pens.',
+  'six':'I have six apples.', 'seven':'There are seven days in a week.', 'eight':'I have eight pens.', 'nine':'Nine kids are here.',
+  'ten':'I am ten years old.', 'eleven':'I have eleven books.', 'twelve':'There are twelve eggs.', 'thirteen':'He is thirteen years old.',
+  'fourteen':'My brother is fourteen.', 'how old are you':'Hi! How old are you?', 'you\'re':'You\'re my friend.',
+  'from plymouth':'I am from Plymouth.', 'in england':'I live in England.', 'where are you from':'Hello! Where are you from?',
+  'where':'Where is my bag?', 'germany':'I live in Germany.', 'class':'I am in class five.', 'game':'I like this game.',
+  'i can see':'I can see a bird.', 'can':'I can swim.', 'and':'I like cats and dogs.', 'a beach':'We play on a beach.',
+  'cyril\'s song':'I like Cyril\'s song.'
+};
+const exKey = w => stripParens(enDisp(w)).toLowerCase().replace(/[\u2019\u2018]/g,"'").replace(/[.?!,]/g,'').replace(/\s+/g,' ').trim();
+const exOf = w => String((w && w.ex) || (w && EX_SEED[exKey(w)]) || '').trim();
+const exRowHTML = w => exOf(w) ? `<div class="exrow">💬 ${esc(exOf(w))}</div>` : '';
 function normBase(s){
   return String(s).toLowerCase().replace(/[’‘´`]/g,"'")
     .replace(/ß/g,'ss').replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue')
@@ -639,11 +666,19 @@ function matchTyped(w, lang, typed){
   const t=canon(normBase(typed),lang,false);
   return !!t && acc.includes(t);
 }
-function typedHint(w, lang){
-  const ans=answersFor(w,lang).sort((a,b)=>b.length-a.length)[0] || '';
+const HLETTER=/[A-Za-zÄÖÜäöüß]/;
+// Die Lösung als Buchstabenfolge: nur die Buchstaben zählen, Leerzeichen und Satzzeichen bleiben stehen
+function hintInfo(w, lang){
   const full = lang==='en' ? stripParens(enDisp(w)) : stripParens(w.de).split(/[;,\/]/)[0].trim();
-  return full.split('').map((ch,i)=> i===0 ? ch : (/[A-Za-zÄÖÜäöüß]/.test(ch) ? '_' : ch)).join(' ');
+  const chars=[...full];
+  return {chars, total:chars.filter(c=>HLETTER.test(c)).length};
 }
+// Die ersten n Buchstaben sichtbar, der Rest als Strich
+function hintPattern(w, lang, n){
+  let k=0;
+  return hintInfo(w,lang).chars.map(c=>HLETTER.test(c) ? (k++<n ? c : '_') : c).join(' ');
+}
+const typedHint=(w,lang)=>hintPattern(w,lang,1);
 
 /* ---------- Sprachausgabe ---------- */
 const TTS_OK = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -687,6 +722,7 @@ function stopSpeaking(){ speakToken++; try{ if(TTS_OK) speechSynthesis.cancel();
 async function sayWord(w, kind){
   if(kind==='en') return say(speakText(w,'en'),'en',DB.settings.rate);
   if(kind==='de') return say(speakText(w,'de'),'de',DB.settings.rate);
+  if(kind==='ex') return say(exOf(w),'en',DB.settings.rate);
   if(kind==='slow') return say(speakText(w,'en'),'en',0.45);
   if(kind==='spell'){
     const letters=speakText(w,'en').replace(/[^A-Za-z]/g,' ').split(/\s+/).join(' ');
@@ -694,6 +730,17 @@ async function sayWord(w, kind){
     await say(spelled,'en',0.6);
     return;
   }
+}
+// Nach dem Prüfen: erst das Wort, dann (kurze Pause) der Beispielsatz. Jede neue Ausgabe bricht die Kette ab.
+async function sayAnswerAudio(w){
+  const ex = DB.settings.speakEx!==false ? exOf(w) : '';
+  let tok=speakToken;
+  if(DB.settings.speakA){
+    const p=sayWord(w,'en'); tok=speakToken; await p;
+    if(tok!==speakToken) return;
+    if(ex) await sleep(350);
+  }
+  if(ex){ if(tok!==speakToken) return; await say(ex,'en',DB.settings.rate); }
 }
 function unlockAudio(){
   try{ if(TTS_OK){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); } }catch(e){}
@@ -909,6 +956,7 @@ const PRAISE=['Stark!','Boom! Sitzt!','Volltreffer!','Mega!','Du rockst das!','G
 const PRAISE_NAME=['{n}, du bist der Wahnsinn!','Weiter so, {n}!','{n} rockt die Vokabeln!','Das hat {n} richtig drauf!','Respekt, {n}!'];
 const COMBO={3:['Dreierpack! 🔥','Hattrick! 🎩'],5:['Fünf in Folge – on fire! 🔥','High Five! ✋ Fünf richtig!'],7:['Sieben in Folge! 🚀','Unaufhaltsam! 🚀'],10:['ZEHN in Folge! 🏆','Vokabel-Held! Zehn am Stück! 🏆']};
 const EMO=['🎉','🌟','🚀','🏅','💥','🦄','🔥','🥳','💪','✨','🎊'];
+const HINTOK=['Mit Tipp geschafft – gut gedacht!','Das Nachdenken hat sich gelohnt!','Gut kombiniert!','Du hast es rausgefunden!'];
 const OOPS=['Nicht schlimm, das sitzt gleich!','Fast! Beim nächsten Mal klappt’s.','Auch Eulen vertun sich mal.','Oha, das merken wir uns!','Kein Beinbruch!','Hoppla! Gleich nochmal.','Aus Fehlern wird man klug.','Das kriegen wir hin!','Knapp vorbei – gleich sitzt’s!'];
 let lastPraise='';
 function praiseText(){
@@ -1184,7 +1232,7 @@ function searchHTML(query){
   const shown=hits.slice(0,60);
   return `<div class="panel"><div class="small muted" style="margin-bottom:4px">${hits.length} Treffer${hits.length>shown.length?' (die ersten '+shown.length+')':''}</div>
     ${shown.map(({p,w})=>`<div class="wrow"><div class="t"><span class="en">${esc(enDisp(w))}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}${plNoteHTML(w)}<div class="de">${esc(w.de)}</div>
-      <div class="small muted">Seite ${p.page}${p.title?' · '+esc(p.title):''}</div></div>
+      ${exRowHTML(w)}<div class="small muted">Seite ${p.page}${p.title?' · '+esc(p.title):''}</div></div>
       <button class="icon" data-act="sayRow" data-id="${esc(w.id)}" aria-label="Anhören">🔊</button>
       <button class="icon" data-act="editFound" data-id="${esc(w.id)}" aria-label="Bearbeiten">✏️</button></div>`).join('')}</div>`;
 }
@@ -1234,6 +1282,7 @@ function viewSettings(){
     <div class="seg"><button data-act="testVoice" data-l="en">🇬🇧 Testen</button><button data-act="testVoice" data-l="de">🇩🇪 Testen</button></div>
     ${!TTS_OK?'<p class="small" style="color:var(--bad-d)">Dieses Gerät/dieser Browser kann nicht vorlesen.</p>':''}
   </div>
+  ${exSettingsHTML(sw)}
   ${scanSettingsHTML()}
   <div class="panel"><h3>Name</h3><label class="field"><span>Wie heißt das Kind? (für die Begrüßung)</span><input type="text" value="${esc(st.name)}" data-text="name" maxlength="20" autocomplete="off"></label></div>
   <div class="panel"><h3>🎤 Einsprechen – Hinweise</h3>
@@ -1287,12 +1336,12 @@ function curItem(){ return S.queue[S.i]; }
 function audioRow(w, langs){
   const b=(k,t,cls='')=>`<button class="btn ghost ${cls}" data-act="say" data-k="${k}">${t}</button>`;
   const out=[];
-  if(langs.includes('en')){ out.push(b('en','🇬🇧 Englisch'), b('slow','🐢 Langsam'), b('spell','🔤 Buchstabieren')); }
+  if(langs.includes('en')){ out.push(b('en','🇬🇧 Englisch'), b('slow','🐢 Langsam'), b('spell','🔤 Buchstabieren')); if(exOf(w)) out.push(b('ex','💬 Im Satz')); }
   if(langs.includes('de')) out.push(b('de','🇩🇪 Deutsch'));
   return `<div class="audio">${out.join('')}</div>`;
 }
 function qipaHTML(w,dir){ return dir.from==='en' ? (w.ipa?esc('['+w.ipa+']'):'')+plNoteHTML(w) : ''; }
-function solHTML(w){ return `<div class="sol"><b>${esc(enDisp(w))}</b> ${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}${plNoteHTML(w)}<div class="de">${esc(w.de)}</div></div>`; }
+function solHTML(w){ return `<div class="sol"><b>${esc(enDisp(w))}</b> ${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}${plNoteHTML(w)}<div class="de">${esc(w.de)}</div>${exOf(w)?`<div class="ex">💬 ${esc(exOf(w))}</div>`:''}</div>`; }
 function refreshQuizWord(){
   if(!S||!curItem()) return;
   const it=curItem(), w=it.w, dir=DIRS[it.d];
@@ -1307,7 +1356,7 @@ function scoreHTML(){ return `⭐ ${S.right}${(S.combo||0)>=2?` · 🔥 ${S.comb
 function renderQuiz(){
   const it=curItem(); if(!it){ return finishSession(); }
   const dir=DIRS[it.d], w=it.w;
-  S.ph='ask'; S.tries=0; S.heard='';
+  S.ph='ask'; S.tries=0; S.heard=''; S.hint=0; S.extra='';
   const lvl=getLvl(w.id,it.d); S.fromLvl=lvl;
   const counts=sessionCounts();
   const pct=Math.round(S.i/S.queue.length*100);
@@ -1334,22 +1383,32 @@ function renderQuiz(){
   renderAnswerArea();
   if(DB.settings.speakQ) setTimeout(()=>{ if(S&&curItem()===it&&S.ph==='ask') sayWord(w, dir.from==='en'?'en':'de'); }, 350);
 }
+// Wie viele Buchstaben der Lösung gerade sichtbar sind: Tipps + (beim Schreiben) der erste Buchstabe nach einem Fehlversuch
+function hintShown(){ return Math.max(S.hint||0, (S.mode==='write' && S.tries>0) ? 1 : 0); }
+function hintControlsHTML(it, dir){
+  const rem=hintInfo(it.w,dir.to).total-hintShown(), shown=hintShown();
+  if(S.mode==='reveal') return rem>1 ? `<button class="link skip" data-act="hint">💡 ${shown?'Noch ein Buchstabe':'Tipp: erster Buchstabe'}</button>` : '';
+  if(rem>1) return `<div class="hintrow"><button class="btn ghost" data-act="hint">💡 ${shown?'Noch ein Buchstabe':'Ich weiß es nicht – Tipp'}</button>${S.hint?'<button class="link skip" data-act="giveup">Lösung zeigen</button>':''}</div>`;
+  return `<div class="hintrow"><button class="btn ghost" data-act="giveup">👀 Lösung zeigen</button></div>`;
+}
 function renderAnswerArea(extra){
   const it=curItem(), dir=DIRS[it.d]; const box=$('#ans'); if(!box) return;
+  if(extra!==undefined) S.extra=extra; extra=S.extra;
   const ml = dir.to==='en' ? 'englische' : 'deutsche';
+  const shown=hintShown(), pat=`<div class="pattern" id="hintpat" aria-live="polite">${shown>0?esc(hintPattern(it.w,dir.to,shown)):''}</div>`;
   let h='';
   if(S.mode==='speak'){
-    h=`<button class="mic" id="micbtn" data-act="mic" aria-label="Aufnahme">🎤</button>
+    h=`${pat}<button class="mic" id="micbtn" data-act="mic" aria-label="Aufnahme">🎤</button>
        <div class="qhint" id="miclabel">${S.tries?'Nochmal versuchen – tippe aufs Mikro':`Tippe aufs Mikro und sag das ${ml} Wort`}</div>
        <div class="heard" id="heard">${esc(extra||'')}</div>
-       <button class="link skip" data-act="giveup">Ich weiß es nicht</button>`;
+       ${hintControlsHTML(it,dir)}`;
   }else if(S.mode==='write'){
-    h=`${S.tries?`<div class="pattern">${esc(typedHint(it.w,dir.to))}</div>`:''}
+    h=`${pat}
        <form class="wform" id="wform" autocomplete="off"><input id="winp" type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="${S.tries?'Nochmal versuchen …':LANGNAME[dir.to]+' schreiben'}" aria-label="Antwort"><button class="btn good" type="submit">Prüfen</button></form>
        <div class="heard" id="heard">${esc(extra||'')}</div>
-       <button class="link skip" data-act="giveup">Ich weiß es nicht</button>`;
+       ${hintControlsHTML(it,dir)}`;
   }else{
-    h=`<button class="btn big sun" data-act="reveal" style="width:100%">👀 Aufdecken</button>`;
+    h=`${pat}<button class="btn big sun" data-act="reveal" style="width:100%">👀 Aufdecken</button>${hintControlsHTML(it,dir)}`;
   }
   box.innerHTML=h;
   if(S.mode==='write'){
@@ -1439,16 +1498,18 @@ function finishCard(ok, typedOrHeard){
   S.ph='result';
   const it=curItem(), w=it.w, dir=DIRS[it.d];
   const first=!it.retried;
-  const toLvl=nextLevel(S.fromLvl, ok);
+  const hinted = ok && (S.hint||0)>0;                       // richtig, aber mit Buchstaben-Tipp
+  let toLvl=nextLevel(S.fromLvl, ok);
+  if(hinted) toLvl = S.fromLvl===0 ? 1 : S.fromLvl;          // mit Tipp: bleibt im Topf (eine neue Vokabel kommt in Topf 1)
   setLvl(w.id,it.d,toLvl);
   const pr=(DB.prog[w.id] ||= {}); ok ? pr.r=(pr.r||0)+1 : pr.w=(pr.w||0)+1;
   logAnswer(ok); save();
-  S.results.push({w,d:it.d,ok,first,from:S.fromLvl,to:toLvl});
-  if(ok){ S.right++; if(first) S.firstTry++; }
+  S.results.push({w,d:it.d,ok,first,from:S.fromLvl,to:toLvl,hinted});
+  if(ok){ S.right++; if(first && !hinted) S.firstTry++; }
   if(first) S.firstTotal++;
-  S.last={ok,toLvl,it};
-  // Falsch beantwortete Karte kommt später in dieser Runde noch einmal
-  if(!ok && !it.retried){
+  S.last={ok,toLvl,it,hinted};
+  // Falsch beantwortete (und mit Tipp gelöste) Karte kommt später in dieser Runde noch einmal
+  if((!ok || hinted) && !it.retried){
     const pos=Math.min(S.i+4, S.queue.length);
     S.queue.splice(pos,0,{w,d:it.d,pageId:it.pageId,retried:true});
   }
@@ -1456,11 +1517,13 @@ function finishCard(ok, typedOrHeard){
 }
 function showResult(ok, toLvl){
   const it=curItem(), w=it.w;
-  const fromKey=lvlKey(S.fromLvl), toKey=lvlKey(toLvl), done=toLvl===DONE;
-  S.combo = ok ? (S.combo||0)+1 : 0;
-  const cm = ok ? COMBO[S.combo] : null;
-  const msg = ok ? (cm ? pick(cm) : praiseText()) : pick(OOPS);
-  const moved = ok ? (done ? 'Geschafft! Diese Vokabel ist erledigt! 🏆' : `Ab in Topf ${toLvl}!`)
+  const hinted=!!(S.last && S.last.hinted);
+  const fromKey=lvlKey(S.fromLvl), toKey=lvlKey(toLvl), done=toLvl===DONE && !hinted;
+  S.combo = ok ? (hinted ? (S.combo||0) : (S.combo||0)+1) : 0;
+  const cm = ok && !hinted ? COMBO[S.combo] : null;
+  const msg = hinted ? pick(HINTOK) : ok ? (cm ? pick(cm) : praiseText()) : pick(OOPS);
+  const moved = hinted ? (S.fromLvl===0 ? 'Ab in Topf 1!' : `Mit Tipp richtig – die Vokabel bleibt ${S.fromLvl<0?'im Falsch-Topf':'in Topf '+S.fromLvl}. Ohne Tipp geht es weiter!`)
+              : ok ? (done ? 'Geschafft! Diese Vokabel ist erledigt! 🏆' : `Ab in Topf ${toLvl}!`)
                    : (toLvl===-1 ? 'Ab in den Falsch-Topf.' : `Einen Topf zurück (Topf ${toLvl}).`);
   const showOverride = !ok && S.mode==='speak';
   $('#ans').innerHTML='';
@@ -1477,7 +1540,7 @@ function showResult(ok, toLvl){
   // Sofort-Belohnung (bei "erledigt" kommt der große Effekt erst, wenn die Vokabel im Pokal landet)
   if(ok){
     if(cm) SND.combo(); else SND.ok(S.combo);
-    if(!done) reward(cm ? 1.8 : 1);
+    if(!done) reward(hinted ? .6 : cm ? 1.8 : 1);
     cheer(msg, !!cm);
   }else SND.bad();
   // Flug: Karte -> Topf, in dem sie lag -> Ziel-Topf
@@ -1495,7 +1558,7 @@ function showResult(ok, toLvl){
       if(done){ SND.done(); burst(x,y,26,['🏆','⭐','🎉','✨','💛']); reward(2.4); cheer('Vokabel erledigt! 🏆',true); }
       else if(ok) burst(x,y,9);
     }});
-  if(DB.settings.speakA) setTimeout(()=>{ if(S&&S.ph==='result') sayWord(w,'en'); }, 500);
+  if(DB.settings.speakA || (DB.settings.speakEx!==false && exOf(w))) setTimeout(()=>{ if(S&&S.ph==='result'&&curItem()===it) sayAnswerAudio(w); }, 500);
   $('#qfb').scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 // Sprecher sagt "richtig", die App hat sich verhört → Korrektur
@@ -1636,6 +1699,56 @@ async function scanFiles(fileList){
     doParse();
   }else renderImport();
 }
+const EX_PROMPT = `Du schreibst Beispielsätze für das Vokabelheft von Kindern (5. Klasse, Englisch als erste Fremdsprache, Niveau A1).
+Zu jeder Vokabel (Zeile: Nummer | englisch | deutsch) schreibst du EINEN ganz einfachen englischen Satz, in dem die englische Vokabel vorkommt.
+Regeln:
+- höchstens 8 Wörter, einfaches Englisch (Gegenwart, „I like …“, „This is …“, „I can …“), nur sehr bekannte Wörter
+- die Vokabel muss im Satz stehen, damit man sie im Zusammenhang hört; der Satz soll die Bedeutung erkennen lassen
+- Wörter in Klammern weglassen oder passend einbauen; „sb“ und „sth“ durch passende Wörter ersetzen; bei „to …“ den Infinitiv passend verwenden
+- ist die Vokabel schon ein Satz oder Ausdruck (z. B. „How old are you?“), baue einen kurzen Satz darum (z. B. „Hi! How old are you?“)
+- kindgerecht, alltäglich, britisches Englisch
+Antworte NUR mit einem JSON-Objekt, die Nummer als Schlüssel und der Satz als Wert, zum Beispiel {"1":"I like my cat.","2":"The sun is hot."}. Kein weiterer Text.`;
+function exValid(sent, w){
+  if(!sent || sent.length<3 || sent.length>90) return false;
+  const core=stripParens(enDisp(w)).toLowerCase().replace(/^(the|a|an|to)\s+/,'').replace(/[^a-z' ]/g,' ').trim().split(/\s+/)[0]||'';
+  return core.length<3 || sent.toLowerCase().includes(core.slice(0,Math.min(4,core.length)));
+}
+// words: Vokabel-Objekte. Schreibt w.ex (und stempelt für den Abgleich), je 20 Wörter pro Anfrage.
+async function genExamples(words, o={}){
+  const persist=o.persist!==false, todo=words.filter(w=>o.force || !exOf(w));
+  let done=0, failed=0;
+  for(let i=0;i<todo.length;i+=20){
+    const batch=todo.slice(i,i+20);
+    const txt=await callClaude([{type:'text',text:EX_PROMPT+'\n\n'+batch.map((w,k)=>`${k+1} | ${enDisp(w)} | ${w.de}`).join('\n')}],2000);
+    let j={}; try{ const m=String(txt).match(/\{[\s\S]*\}/); j=JSON.parse(m?m[0]:'{}'); }catch(e){}
+    batch.forEach((w,k)=>{
+      let sent=j[String(k+1)]; sent=typeof sent==='string' ? sent.replace(/^["“„']+|["”“']+$/g,'').replace(/\s+/g,' ').trim() : '';
+      if(exValid(sent,w)){ w.ex=sent; if(persist) stampIn(DB,'w:'+w.id); done++; } else failed++;
+    });
+    if(persist) save();
+    if(o.progress) o.progress(Math.min(i+20,todo.length),todo.length);
+  }
+  return {done,failed,total:todo.length};
+}
+let exBusy=false;
+async function runGenEx(words, quiet){
+  if(!getKey()){ if(!quiet) toast('Dafür muss ein Elternteil den Schlüssel eintragen (Einstellungen → Foto-Scan).'); return; }
+  if(exBusy){ if(!quiet) toast('Die Sätze werden gerade erstellt …'); return; }
+  const todo=words.filter(w=>!exOf(w));
+  if(!todo.length){ if(!quiet) toast('Alle Vokabeln haben schon einen Satz ✔'); return; }
+  exBusy=true; toast(`💬 Beispielsätze werden erstellt … (${todo.length})`);
+  try{
+    const r=await genExamples(todo,{progress:(a,b)=>{ if(b>20 && a<b) toast(`💬 Sätze: ${a} von ${b} …`); }});
+    toast(r.done ? `💬 ${r.done} Beispielsätze erstellt ✔`+(r.failed?` (${r.failed} ohne Satz)`:'') : 'Es konnten keine Sätze erstellt werden. Bitte später nochmal versuchen.');
+  }catch(e){ toast(scanError(e)); }
+  finally{
+    exBusy=false;
+    const ae=document.activeElement;
+    if(!(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))){
+      if(UI.screen==='editpage') renderEditPage(); else if(!UI.screen) render();
+    }
+  }
+}
 function consolidatePages(pages){
   const out=[];
   pages.forEach(pg=>{ const ex=pg.page && out.find(o=>o.page===pg.page);
@@ -1654,6 +1767,15 @@ function scanPanelHTML(){
     <input type="file" id="scanLib" accept="image/*" multiple style="display:none">
     <div id="scanStatus">${s.busy?busyHTML('Foto wird gelesen'):''}</div>
     ${s.scanErr?`<div class="note warn" style="margin:12px 0 0">${esc(s.scanErr)}</div>`:''}</div>`;
+}
+function exSettingsHTML(sw){
+  const all=DB.pages.flatMap(p=>p.words), have=all.filter(w=>exOf(w)).length, k=getKey();
+  return `<div class="panel"><h3>💬 Beispielsätze</h3>
+    ${sw('speakEx','Beispielsatz mitsprechen','Nach dem Prüfen hört man das Wort und danach einen ganz einfachen Satz damit')}
+    <p class="small muted" style="margin:10px 0 8px">${have} von ${all.length} Vokabeln haben einen Satz. Sätze lassen sich bei jeder Vokabel von Hand eintragen (✏️).</p>
+    ${k ? `${all.length>have?`<button class="btn sm" data-act="genExAll">🪄 Fehlende Sätze erzeugen (${all.length-have})</button>`:'<div class="note ok">✅ Alle Vokabeln haben einen Satz</div>'}
+      ${sw('autoEx','Neue Seiten automatisch mit Sätzen versehen','Beim Speichern einer neuen Seite erzeugt die App die Sätze')}`
+      : `<p class="small muted" style="margin:0">Zum automatischen Erzeugen muss ein Elternteil unten beim Foto-Scan den Schlüssel eintragen.</p>`}</div>`;
 }
 function scanSettingsHTML(){
   const k=getKey(), st=DB.settings;
@@ -1728,6 +1850,7 @@ function saveImport(){
   save(); importState=null;
   toast(`Gespeichert: ${p.pages.reduce((s,x)=>s+x.words.length,0)} Vokabeln 🎉`);
   UI.screen=null; UI.tab='learn'; render(); window.scrollTo(0,0);
+  if(getKey() && DB.settings.autoEx!==false) runGenEx(ids.flatMap(id=>(getPage(id)||{words:[]}).words), true);
 }
 
 /* ----- Seite bearbeiten ----- */
@@ -1741,7 +1864,9 @@ function renderEditPage(){
       <p class="small muted" style="margin:-4px 0 10px">Seiten mit gleicher Gruppe (sonst gleicher Überschrift) werden auf der Startseite zusammengefasst und lassen sich zuklappen.</p>
       <button class="btn sm" data-act="savePageMeta">Speichern</button></div>
     <div class="panel"><h3>${p.words.length} Vokabeln</h3>
-      ${p.words.map(w=>`<div class="wrow"><div class="t"><span class="en">${esc(enListTxt(w))}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div></div>
+      <p class="small muted" style="margin:-4px 0 8px">💬 ${p.words.filter(w=>exOf(w)).length} von ${p.words.length} mit Beispielsatz</p>
+      ${getKey()&&p.words.some(w=>!exOf(w))?`<button class="btn sm ghost" data-act="genExPage" style="margin:0 0 10px">🪄 Fehlende Sätze erzeugen</button>`:''}
+      ${p.words.map(w=>`<div class="wrow"><div class="t"><span class="en">${esc(enListTxt(w))}</span>${w.ipa?`<span class="ipa">[${esc(w.ipa)}]</span>`:''}<div class="de">${esc(w.de)}</div>${exRowHTML(w)}</div>
         <button class="icon" data-act="editWord" data-id="${esc(w.id)}" aria-label="Bearbeiten">✏️</button></div>`).join('')}
       <button class="btn good" style="margin-top:12px;width:100%" data-act="addWord">➕ Vokabel hinzufügen</button></div>
     <button class="btn bad" style="width:100%" data-act="deletePage">🗑️ Ganze Seite löschen</button></div>`;
@@ -1761,6 +1886,8 @@ function wordForm(w, ctx){
     <label class="field"><span>Lautschrift (optional)</span><input id="wfIpa" type="text" value="${esc(w.ipa)}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <label class="field"><span>Deutsch</span><input id="wfDe" type="text" value="${esc(w.de)}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
     <label class="field"><span>Weitere richtige deutsche Antworten (mit ; trennen, optional)</span><input id="wfOk" type="text" value="${esc((w.deOk||[]).join('; '))}" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+    <label class="field"><span>Beispielsatz (englisch, ganz einfach, optional)</span><input id="wfEx" type="text" value="${esc(w.ex||'')}" placeholder="${esc(exOf(w)||'z. B. I like my cat.')}" autocapitalize="sentences" autocorrect="off" spellcheck="false"></label>
+    <div class="seg" style="margin:-4px 0 10px"><button data-act="sayExForm">🔊 Anhören</button>${getKey()?'<button data-act="genExForm">🪄 Erzeugen</button>':''}</div>
     <p class="small muted" style="margin:-4px 0 10px">Tipp: Mehrzahl-Hinweise („fish, pl fish“) und Klammern („listen (to)“) versteht die App – bei Klammern gilt beides als richtig.</p>
     <div class="btns">${w.id&&wfCtx!=='quiz'?'<button class="btn bad" data-act="delWord" data-id="'+esc(w.id)+'">Löschen</button>':''}<button class="btn ghost" data-act="closeSheet">Abbrechen</button><button class="btn good" data-act="saveWord" data-id="${esc(w.id||'')}">Speichern</button></div>`);
 }
@@ -1783,6 +1910,28 @@ const A={
   say:t=>{ unlockAudio(); const it=S&&curItem(); if(it) sayWord(it.w,t.dataset.k); },
   mic:()=>startListening(),
   giveup:()=>{ if(S&&S.ph==='ask') finishCard(false); },
+  hint:()=>{
+    if(!S||S.ph!=='ask') return;
+    const it=curItem(), dir=DIRS[it.d], shown=hintShown();
+    if(hintInfo(it.w,dir.to).total-shown<=1) return finishCard(false);   // nichts mehr zu verraten: Lösung
+    const typed = (S.mode==='write' && $('#winp')) ? $('#winp').value : '';
+    stopListening(true); const m=$('#micbtn'); if(m) m.classList.remove('live');
+    S.hint=shown+1;
+    renderAnswerArea();
+    const inp=$('#winp'); if(inp && typed) inp.value=typed;
+  },
+  sayExForm:()=>{ const v=(($('#wfEx')||{}).value||'').trim(); if(!v){ toast('Hier steht noch kein Satz.'); return; } unlockAudio(); say(v,'en',DB.settings.rate); },
+  genExForm:async()=>{
+    const en=(($('#wfEn')||{}).value||'').trim(), de=(($('#wfDe')||{}).value||'').trim();
+    if(!en||!de){ toast('Bitte erst Englisch und Deutsch ausfüllen.'); return; }
+    if(!getKey()){ toast('Dafür muss ein Elternteil den Schlüssel eintragen (Einstellungen).'); return; }
+    toast('💬 Satz wird erstellt …');
+    const tmp={en,de};
+    try{ await genExamples([tmp],{persist:false,force:true}); }catch(e){ toast(scanError(e)); return; }
+    if(tmp.ex){ const f=$('#wfEx'); if(f) f.value=tmp.ex; toast('Satz erstellt ✔'); } else toast('Das hat nicht geklappt. Bitte nochmal versuchen.');
+  },
+  genExPage:()=>{ const p=getPage(editPageId); if(p) runGenEx(p.words); },
+  genExAll:()=>runGenEx(DB.pages.flatMap(p=>p.words)),
   reveal:()=>{
     if(S.ph!=='ask') return; S.ph='self'; const it=curItem(), w=it.w;
     $('#ans').innerHTML=`<div class="sol" style="margin:6px 0 10px"><b>${esc(DIRS[it.d].to==='en'?enDisp(w):w.de)}</b>${DIRS[it.d].to==='en'&&w.ipa?` <span class="ipa" style="color:var(--primary-d)">[${esc(w.ipa)}]</span>`:''}${DIRS[it.d].to==='en'?plNoteHTML(w):''}</div>
@@ -1845,10 +1994,10 @@ const A={
     const found=t.dataset.id ? findWord(t.dataset.id) : null;
     const p=found ? found.p : getPage(editPageId), en=$('#wfEn').value.trim(), de=$('#wfDe').value.trim();
     if(!en||!de){ toast('Englisch und Deutsch ausfüllen.'); return; }
-    const ipa=$('#wfIpa').value.trim().replace(/^\[|\]$/g,''), ok=$('#wfOk').value.split(';').map(s=>s.trim()).filter(Boolean);
+    const ipa=$('#wfIpa').value.trim().replace(/^\[|\]$/g,''), ok=$('#wfOk').value.split(';').map(s=>s.trim()).filter(Boolean), ex=(($('#wfEx')||{}).value||'').trim();
     let w=found && found.w;
-    if(w){ w.en=en; w.ipa=ipa; w.de=de; ok.length?w.deOk=ok:delete w.deOk; }
-    else{ let id=p.id+':'+slug(en), k=2; while(p.words.some(x=>x.id===id)) id=p.id+':'+slug(en)+'#'+(k++); w={id,en,ipa,de}; if(ok.length) w.deOk=ok; p.words.push(w); }
+    if(w){ w.en=en; w.ipa=ipa; w.de=de; ok.length?w.deOk=ok:delete w.deOk; ex?w.ex=ex:delete w.ex; }
+    else{ let id=p.id+':'+slug(en), k=2; while(p.words.some(x=>x.id===id)) id=p.id+':'+slug(en)+'#'+(k++); w={id,en,ipa,de}; if(ok.length) w.deOk=ok; if(ex) w.ex=ex; p.words.push(w); }
     stampIn(DB,'w:'+w.id);
     save(); closeSheet(); afterWordSave();
   },
@@ -2075,7 +2224,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 window.addEventListener('online',()=>scheduleSync(1000));
 
 // Für Tests
-window.__app={save,mergePage,syncMerge,syncRemoteView,syncBuildDoc,syncCanon,syncNow,get SYNC(){return SYNC},stampIn,splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
+window.__app={hintPattern,hintInfo,exOf,exKey,genExamples,runGenEx,sayAnswerAudio,save,mergePage,syncMerge,syncRemoteView,syncBuildDoc,syncCanon,syncNow,get SYNC(){return SYNC},stampIn,splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
 </script>
 </body>
 </html>
