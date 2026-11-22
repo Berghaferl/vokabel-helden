@@ -2220,6 +2220,13 @@ try{
 syncLoadCfg();
 render();
 if(SYNC.cfg) setTimeout(()=>syncNow(false),1200);
+// Alte Seiten nachrüsten: fehlt Vokabeln der Beispielsatz und ist ein Schlüssel hinterlegt, erzeugt die App sie einmal im Hintergrund
+// (nach dem ersten Abgleich, damit Sätze von anderen Geräten zuerst ankommen; nie mitten im Quiz).
+setTimeout(()=>{ try{
+  if(UI.screen || !getKey() || DB.settings.autoEx===false) return;
+  const miss=DB.pages.flatMap(p=>p.words).filter(w=>!exOf(w));
+  if(miss.length) runGenEx(miss,true);
+}catch(e){} }, SYNC.cfg ? 7000 : 3500);
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && SYNC.cfg && Date.now()-SYNC.lastTry>60000) syncNow(false); });
 window.addEventListener('online',()=>scheduleSync(1000));
 
