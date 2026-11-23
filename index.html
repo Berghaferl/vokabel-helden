@@ -543,8 +543,24 @@ function spreadSameWord(arr){
 
 /* ---------- Antworten prüfen ---------- */
 const ART_EN=/^(the|a|an)\s+/, ART_DE=/^(der|die|das|ein|eine|einen|einem|einer)\s+/;
-const NUM_EN={'0':'zero','1':'one','2':'two','3':'three','4':'four','5':'five','6':'six','7':'seven','8':'eight','9':'nine','10':'ten','11':'eleven','12':'twelve','13':'thirteen','14':'fourteen','15':'fifteen','16':'sixteen','17':'seventeen','18':'eighteen','19':'nineteen','20':'twenty'};
-const NUM_DE={'0':'null','1':'eins','2':'zwei','3':'drei','4':'vier','5':'fuenf','6':'sechs','7':'sieben','8':'acht','9':'neun','10':'zehn','11':'elf','12':'zwoelf','13':'dreizehn','14':'vierzehn','15':'fuenfzehn','16':'sechzehn','17':'siebzehn','18':'achtzehn','19':'neunzehn','20':'zwanzig'};
+const ONES_EN=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+const TENS_EN=['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+const ONES_DE=['null','eins','zwei','drei','vier','fuenf','sechs','sieben','acht','neun','zehn','elf','zwoelf','dreizehn','vierzehn','fuenfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+const TENS_DE=['','','zwanzig','dreissig','vierzig','fuenfzig','sechzig','siebzig','achtzig','neunzig'];
+function numWords(n, lang){
+  n=+n; if(!(n>=0 && n<1000)) return null;
+  const en=lang==='en';
+  const below100=k=>{
+    if(k<20) return (en?ONES_EN:ONES_DE)[k];
+    const t=Math.floor(k/10), o=k%10;
+    if(en) return TENS_EN[t]+(o?' '+ONES_EN[o]:'');
+    return o ? (o===1?'ein':ONES_DE[o])+'und'+TENS_DE[t] : TENS_DE[t];
+  };
+  if(n<100) return below100(n);
+  const h=Math.floor(n/100), r=n%100;
+  if(en) return ONES_EN[h]+' hundred'+(r?' '+below100(r):'');
+  return (h===1?'':ONES_DE[h])+'hundert'+(r?below100(r):'');
+}
 const HOMO_EN={to:'two',too:'two',won:'one',for:'four',fore:'four',ate:'eight',wear:'where',ware:'where',meat:'meet',eye:'i',u:'you',ewe:'you',hey:'hi',hay:'hi'};
 const stripParens = s => String(s).replace(/\([^)]*\)/g,' ').replace(/\s+/g,' ').trim();
 // Mehrzahl-Hinweis abtrennen: "fish, pl fish" / "fish (pl fish)" / "people (pl)" -> Wort + Mehrzahl
@@ -607,11 +623,15 @@ function expandContr(s){
     .replace(/\b(what|where|who|how|it|that|here|there|he|she)'s\b/g,'$1 is');
 }
 function canon(s, lang, homo){
-  return s.split(' ').map(t=>{
-    t = (lang==='en' ? NUM_EN : NUM_DE)[t] || t;
+  let r=s.replace(/-/g,' ').split(' ').filter(Boolean).map(t=>{
+    if(/^\d{1,3}$/.test(t)) t = numWords(t,lang) || t;
     if(homo && lang==='en') t = HOMO_EN[t] || t;
     return t;
   }).join(' ');
+  // "one hundred and twenty" = "one hundred twenty"; "a hundred" = "one hundred"; "einhundert" = "hundert"
+  if(lang==='en') r=r.replace(/\bhundred and\b/g,'hundred').replace(/^a hundred\b/,'one hundred');
+  else r=r.replace(/\beinhundert/g,'hundert');
+  return r;
 }
 function answersFor(w, lang){
   const set=new Set();
@@ -647,15 +667,23 @@ function lev(a,b){
   }
   return prev[n];
 }
-function tolerance(len){ return len<=4 ? 0 : len<=8 ? 1 : 2; }
+function tolerance(len){ return len<=5 ? 0 : len<=8 ? 1 : 2; }   // kurze Wörter exakt: eine andere Silbe/ein anderer Buchstabe ist meist ein anderes Wort (beach/bench)
 // Gesprochen: großzügig (Erkennung ist nicht perfekt)
 function matchSpoken(w, lang, heardList, strict){
   const acc=answersFor(w,lang).map(a=>canon(a,lang,true));
-  for(const h of heardList){
-    const hc=canon(normBase(h),lang,true);
-    if(!hc) continue;
+  const hs=heardList.map(h=>canon(normBase(h),lang,true));
+  const top=hs[0]||'';
+  const nospace=x=>x.replace(/ /g,'');
+  for(let i=0;i<hs.length;i++){
+    const hc=hs[i]; if(!hc) continue;
     for(const a of acc){
-      if(hc===a || (!strict && lev(hc,a)<=tolerance(a.length))) return true;
+      const exact = hc===a || nospace(hc)===nospace(a);     // "foot ball" = "football"
+      if(i===0){
+        if(exact || (!strict && lev(hc,a)<=tolerance(a.length))) return true;
+      }else if(exact && top){
+        // Nebenvorschlag der Erkennung: nur wenn der Hauptvorschlag fast gleich klingt (sonst wird "help" zu "hope")
+        if(lev(top,a)<=(a.length<=5?1:2)) return true;
+      }
     }
   }
   return false;
@@ -2231,7 +2259,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 window.addEventListener('online',()=>scheduleSync(1000));
 
 // Für Tests
-window.__app={hintPattern,hintInfo,exOf,exKey,genExamples,runGenEx,sayAnswerAudio,save,mergePage,syncMerge,syncRemoteView,syncBuildDoc,syncCanon,syncNow,get SYNC(){return SYNC},stampIn,splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
+window.__app={numWords,hintPattern,hintInfo,exOf,exKey,genExamples,runGenEx,sayAnswerAudio,save,mergePage,syncMerge,syncRemoteView,syncBuildDoc,syncCanon,syncNow,get SYNC(){return SYNC},stampIn,splitPl,parenVariants,speakText,pageGroups,wordStatus,findWord,enDisp,nextLevel,matchSpoken,matchTyped,answersFor,parseVocabText,potSVG,reward,cheer,startFromPot,praiseText,get DB(){return DB},get S(){return S},get FX(){return FX}};
 </script>
 </body>
 </html>
