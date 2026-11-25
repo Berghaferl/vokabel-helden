@@ -1197,7 +1197,7 @@ function viewLearn(){
     ${[['de-en','🇩🇪 → 🇬🇧','Deutsch fragen'],['en-de','🇬🇧 → 🇩🇪','Englisch fragen'],['mix','🔀 Gemischt','beides']].map(([v,t,s])=>`<button data-act="setOpt" data-k="dir" data-v="${v}" class="${st.dir===v?'on':''}">${t}<small>${s}</small></button>`).join('')}
   </div></div>
   <div class="panel"><h3>Wie antworten?</h3><div class="seg">
-    ${[['speak','🎤 Sprechen','einsprechen'],['write','⌨️ Schreiben','tippen'],['reveal','🃏 Aufdecken','selbst prüfen']].map(([v,t,s])=>`<button data-act="setOpt" data-k="mode" data-v="${v}" class="${st.mode===v?'on':''}">${t}<small>${s}</small></button>`).join('')}
+    ${[['speak','🎤 Sprechen','einsprechen'],['write','⌨️ Schreiben','tippen'],['mix','🎲 Zufall','mal so, mal so'],['reveal','🃏 Aufdecken','selbst prüfen']].map(([v,t,s])=>`<button data-act="setOpt" data-k="mode" data-v="${v}" class="${st.mode===v?'on':''}">${t}<small>${s}</small></button>`).join('')}
   </div></div>
   <div class="panel"><h3>Wie viele ${unitName()}?</h3><div class="seg">
     ${[['10','10'],['20','20'],['all','Alle']].map(([v,t])=>`<button data-act="setOpt" data-k="size" data-v="${v}" class="${String(st.size)===v?'on':''}">${t}</button>`).join('')}
@@ -1236,7 +1236,7 @@ function potSheet(d, k){
     : +k===DONE ? 'Zur Wiederholung. Falsch heißt: zurück in Topf '+MAXPOT+'.'
     : `Richtig → ${up}, falsch → ${down}.`;
   const sizes=[10,20].filter(x=>x<N);
-  const modes=[['speak','🎤 Sprechen'],['write','⌨️ Schreiben'],['reveal','🃏 Aufdecken']];
+  const modes=[['speak','🎤 Sprechen'],['write','⌨️ Schreiben'],['mix','🎲 Zufall'],['reveal','🃏 Aufdecken']];
   showSheet(`<h3>${title} (${N})</h3><p class="small muted" style="margin:0 0 6px">${hint}</p>
     ${N?`<div class="small" style="font-weight:800;margin:10px 0 6px">Jetzt üben – wie viele?</div>
       <div class="btns" style="margin-top:0">${sizes.map(x=>`<button class="btn" data-act="startPot" data-d="${d}" data-k="${k}" data-n="${x}">${x}</button>`).join('')}<button class="btn good" data-act="startPot" data-d="${d}" data-k="${k}" data-n="all">Alle ${N}</button></div>
@@ -1335,7 +1335,7 @@ function startSession(){
   const n=DB.settings.size==='all' ? items.length : Math.min(+DB.settings.size, items.length);
   const queue=spreadSameWord(shuffle(weightedPick(items,n))).map(i=>({w:i.w,d:i.d,pageId:i.pageId,retried:false}));
   const theme = DB.settings.theme==='mix' ? pick(THEMES) : DB.settings.theme;
-  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode, theme, replay, sel, dirs, startedAt:Date.now(), ph:'ask', tries:0, combo:0, restart:null};
+  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode==='mix'?'write':DB.settings.mode, modeSetting:DB.settings.mode, theme, replay, sel, dirs, startedAt:Date.now(), ph:'ask', tries:0, combo:0, restart:null};
   DB.stats.sessions++; save();
   UI.screen='quiz'; render(); window.scrollTo(0,0);
 }
@@ -1353,7 +1353,7 @@ function startFromPot(d, k, nSel){
   unlockAudio();
   const queue=items.slice(0,n).map(i=>({w:i.w,d:i.d,pageId:i.pageId,retried:false}));
   const theme = DB.settings.theme==='mix' ? pick(THEMES) : DB.settings.theme;
-  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode, theme, replay:false, sel:ids, dirs:[d], startedAt:Date.now(), ph:'ask', tries:0, combo:0,
+  S={queue, i:0, right:0, firstTry:0, firstTotal:0, results:[], mode:DB.settings.mode==='mix'?'write':DB.settings.mode, modeSetting:DB.settings.mode, theme, replay:false, sel:ids, dirs:[d], startedAt:Date.now(), ph:'ask', tries:0, combo:0,
      restart:()=>startFromPot(d,k,nSel)};
   DB.stats.sessions++; save(); closeSheet();
   UI.screen='quiz'; render(); window.scrollTo(0,0);
@@ -1381,6 +1381,14 @@ function refreshQuizWord(){
 }
 function unitOf(){ return S.dirs.length===1 ? 'Vokabel' : 'Frage'; }
 function scoreHTML(){ return `⭐ ${S.right}${(S.combo||0)>=2?` · 🔥 ${S.combo}`:''}`; }
+// "Zufall": pro Karte zufällig Sprechen oder Schreiben (nie dreimal dasselbe hintereinander; ohne Spracherkennung nur Schreiben)
+function pickMixMode(){
+  if(!SR) return 'write';
+  const h=S.mixHist||(S.mixHist=[]);
+  let m = Math.random()<0.5 ? 'speak' : 'write';
+  if(h.length>=2 && h[h.length-1]===m && h[h.length-2]===m) m = m==='speak' ? 'write' : 'speak';
+  h.push(m); return m;
+}
 function renderQuiz(){
   const it=curItem(); if(!it){ return finishSession(); }
   const dir=DIRS[it.d], w=it.w;
@@ -1389,6 +1397,7 @@ function renderQuiz(){
   const counts=sessionCounts();
   const pct=Math.round(S.i/S.queue.length*100);
   const promptText = dir.from==='en' ? enDisp(w) : w.de;
+  if(S.modeSetting==='mix') S.mode=pickMixMode();
   const owlHint = S.mode==='speak' ? 'Sag es laut!' : S.mode==='write' ? 'Schreib es auf!' : 'Denk kurz nach …';
   app.innerHTML=`<div class="quiz">
     <div class="qtop"><button class="icon" data-act="quit" aria-label="Beenden">✕</button>
